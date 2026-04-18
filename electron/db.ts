@@ -1,0 +1,207 @@
+import Database from "better-sqlite3";
+import { app } from "electron";
+import * as path from "path";
+import * as fs from "fs";
+import type {
+  AnalysisRecord,
+  AppSettings,
+  SavedWorkout,
+} from "../shared/types";
+
+let db: Database.Database | null = null;
+
+export function initDb(): Database.Database {
+  if (db) return db;
+  const dir = path.join(app.getPath("userData"), "data");
+  fs.mkdirSync(dir, { recursive: true });
+  db = new Database(path.join(dir, "coach.db"));
+  db.pragma("journal_mode = WAL");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS analyses (
+      id TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL,
+      sport_id TEXT NOT NULL,
+      shot TEXT NOT NULL,
+      thumbnail TEXT,
+      payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_analyses_created ON analyses(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS workouts (
+      id TEXT PRIMARY KEY,
+      saved_at TEXT NOT NULL,
+      analysis_id TEXT,
+      tags TEXT NOT NULL,
+      payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_workouts_saved ON workouts(saved_at DESC);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
+  return db;
+}
+
+function requireDb(): Database.Database {
+  if (!db) throw new Error("DB not initialized");
+  return db;
+}
+
+// ---- Analyses ----
+
+export function saveAnalysis(r: AnalysisRecord): void {
+  const d = requireDb();
+  d.prepare(
+    `INSERT OR REPLACE INTO analyses (id, created_at, sport_id, shot, thumbnail, payload)
+     VALUES (@id, @createdAt, @sportId, @shot, @thumbnail, @payload)`,
+  ).run({
+    id: r.id,
+    createdAt: r.createdAt,
+    sportId: r.sportId,
+    shot: r.shot,
+    thumbnail: r.thumbnailDataUrl ?? null,
+    payload: JSON.stringify(r.report),
+  });
+}
+
+export function listAnalyses(): AnalysisRecord[] {
+  const d = requireDb();
+  const rows = d
+    .prepare(
+      `SELECT id, created_at as createdAt, sport_id as sportId, shot,
+              thumbnail, payload FROM analyses ORDER BY created_at DESC`,
+    )
+    .all() as {
+    id: string;
+    createdAt: string;
+    sportId: string;
+    shot: string;
+    thumbnail: string | null;
+    payload: string;
+  }[];
+  return rows.map((row) => ({
+    id: row.id,
+    createdAt: row.createdAt,
+    sportId: row.sportId as AnalysisRecord["sportId"],
+    shot: row.shot,
+    thumbnailDataUrl: row.thumbnail ?? undefined,
+    report: JSON.parse(row.payload),
+  }));
+}
+
+export function getAnalysis(id: string): AnalysisRecord | null {
+  const d = requireDb();
+  const row = d
+    .prepare(
+      `SELECT id, created_at as createdAt, sport_id as sportId, shot,
+              thumbnail, payload FROM analyses WHERE id = ?`,
+    )
+    .get(id) as
+    | {
+        id: string;
+        createdAt: string;
+        sportId: string;
+        shot: string;
+        thumbnail: string | null;
+        payload: string;
+      }
+    | undefined;
+  if (!row) return null;
+  return {
+    id: row.id,
+    createdAt: row.createdAt,
+    sportId: row.sportId as AnalysisRecord["sportId"],
+    shot: row.shot,
+    thumbnailDataUrl: row.thumbnail ?? undefined,
+    report: JSON.parse(row.payload),
+  };
+}
+
+export function deleteAnalysis(id: string): void {
+  requireDb().prepare(`DELETE FROM analyses WHERE id = ?`).run(id);
+}
+
+// ---- Workouts ----
+
+export function saveWorkout(w: SavedWorkout): void {
+  requireDb()
+    .prepare(
+      `INSERT OR REPLACE INTO workouts (id, saved_at, analysis_id, tags, payload)
+       VALUES (@id, @savedAt, @analysisId, @tags, @payload)`,
+    )
+    .run({
+      id: w.id,
+      savedAt: w.savedAt,
+      analysisId: w.analysisId ?? null,
+      tags: JSON.stringify(w.tags),
+      payload: JSON.stringify(w.workout),
+    });
+}
+
+export function listWorkouts(): SavedWorkout[] {
+  const rows = requireDb()
+    .prepare(
+      `SELECT id, saved_at as savedAt, analysis_id as analysisId,
+              tags, payload FROM workouts ORDER BY saved_at DESC`,
+    )
+    .all() as {
+    id: string;
+    savedAt: string;
+    analysisId: string | null;
+    tags: string;
+    payload: string;
+  }[];
+  return rows.map((row) => ({
+    id: row.id,
+    savedAt: row.savedAt,
+    analysisId: row.analysisId ?? undefined,
+    tags: JSON.parse(row.tags),
+    workout: JSON.parse(row.payload),
+  }));
+}
+
+export function deleteWorkout(id: string): void {
+  requireDb().prepare(`DELETE FROM workouts WHERE id = ?`).run(id);
+}
+
+// ---- Settings ----
+
+const DEFAULT_SETTINGS: AppSettings = {
+  anthropicApiKey: null,
+  model: "claude-opus-4-7",
+  theme: "dark",
+};
+
+export function getSettings(): AppSettings {
+  const d = requireDb();
+  const rows = d.prepare(`SELECT key, value FROM settings`).all() as {
+    key: string;
+    value: string;
+  }[];
+  const out: Record<string, string> = {};
+  for (const r of rows) out[r.key] = r.value;
+  return {
+    anthropicApiKey: out.anthropicApiKey ?? DEFAULT_SETTINGS.anthropicApiKey,
+    model: out.model ?? DEFAULT_SETTINGS.model,
+    theme: (out.theme as AppSettings["theme"]) ?? DEFAULT_SETTINGS.theme,
+  };
+}
+
+export function setSettings(partial: Partial<AppSettings>): AppSettings {
+  const d = requireDb();
+  const current = getSettings();
+  const next: AppSettings = { ...current, ...partial };
+  const upsert = d.prepare(
+    `INSERT INTO settings(key,value) VALUES(?,?)
+     ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+  );
+  const tx = d.transaction((s: AppSettings) => {
+    upsert.run("anthropicApiKey", s.anthropicApiKey ?? "");
+    upsert.run("model", s.model);
+    upsert.run("theme", s.theme);
+  });
+  tx(next);
+  return next;
+}

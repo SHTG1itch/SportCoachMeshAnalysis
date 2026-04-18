@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Window chrome drag region for frameless Electron window */
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Subtle grain for premium feel */
+.bg-grain {
+  background-image:
+    radial-gradient(
+      1200px 800px at 85% -10%,
+      rgba(74, 143, 253, 0.08),
+      transparent 60%
+    ),
+    radial-gradient(
+      1000px 600px at -5% 110%,
+      rgba(34, 195, 138, 0.06),
+      transparent 65%
+    ),
+    #07090e;
+}
+
+@layer components {
+  .card {
+    @apply bg-canvas-700/70 border border-white/5 backdrop-blur-sm rounded-xl shadow-card;
+  }
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm
+      transition-colors duration-150 disabled:opacity-40 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-accent-500 text-white hover:bg-accent-600;
+  }
+  .btn-ghost {
+    @apply btn text-ink-100 hover:bg-white/5 border border-white/5;
+  }
+  .btn-subtle {
+    @apply btn text-ink-300 hover:text-ink-100 hover:bg-white/5;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full
+      border border-white/5 bg-white/[0.03] text-ink-200;
+  }
+  .chip-active {
+    @apply chip bg-accent-500/15 border-accent-500/40 text-accent-400;
+  }
+  .h1 {
+    @apply text-3xl font-semibold tracking-tight text-ink-50;
+  }
+  .h2 {
+    @apply text-xl font-semibold tracking-tight text-ink-50;
+  }
+  .h3 {
+    @apply text-sm font-semibold uppercase tracking-wide text-ink-300;
+  }
+  .label {
+    @apply text-xs font-medium uppercase tracking-wide text-ink-400;
+  }
+  .input {
+    @apply w-full bg-canvas-600 border border-white/5 rounded-lg px-3 py-2 text-sm
+      text-ink-50 placeholder:text-ink-400 focus:outline-none focus:border-accent-500/60;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #1f2431;
+  border-radius: 8px;
+  border: 2px solid #07090e;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2a3043;
+}
