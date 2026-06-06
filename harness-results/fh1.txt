@@ -1,0 +1,3 @@
+STATUS: user frame 60
+Harness config: pro=/testclips/novak_fh user=/testclips/timo_fh sport=tennis shot=Forehand proKind=video maxFrames=160 selftest=false
+· pro frames: 150

@@ -22,8 +22,10 @@ export function JointBreakdown({ deltas }: Props) {
           d.signedBiasDeg > 0
             ? `+${d.signedBiasDeg.toFixed(1)}° more than pro`
             : `${d.signedBiasDeg.toFixed(1)}° less than pro`;
-        // Bar width: scale meanDelta against 45° max.
-        const pct = Math.min(100, (d.meanDeltaDeg / 45) * 100);
+        // Bar width scales the systematic gap (|signed bias|) against 30° max —
+        // this is the coachable difference that also drives significance.
+        const gap = Math.abs(d.signedBiasDeg);
+        const pct = Math.min(100, (gap / 30) * 100);
         return (
           <div key={d.joint} className="py-3">
             <div className="flex items-center justify-between">
@@ -52,7 +54,7 @@ export function JointBreakdown({ deltas }: Props) {
                 />
               </div>
               <div className="text-xs tabular-nums text-ink-200 w-28 text-right">
-                Δ {d.meanDeltaDeg.toFixed(1)}°
+                Δ {gap.toFixed(1)}°
               </div>
             </div>
             <div className="mt-1 text-xs text-ink-400">{biasLabel}</div>

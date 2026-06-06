@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeAngles, JOINT_FEATURES } from "./angles";
+import { computeAngles, computeAnglesSequence, detectUpSign, JOINT_FEATURES } from "./angles";
 import { L, type PoseFrame } from "./types";
 
 function mkFrame(overrides: Partial<Record<number, [number, number, number]>>): PoseFrame {
@@ -75,6 +75,89 @@ describe("computeAngles", () => {
     const out = computeAngles(f);
     const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_rotation");
     expect(out[idx]).toBeCloseTo(0, 3);
+  });
+
+  it("trunk lean = 0 when torso is vertical", () => {
+    const f = mkFrame({
+      [L.LEFT_SHOULDER]: [-0.2, 2, 0],
+      [L.RIGHT_SHOULDER]: [0.2, 2, 0],
+      [L.LEFT_HIP]: [-0.2, 1, 0],
+      [L.RIGHT_HIP]: [0.2, 1, 0],
+    });
+    const out = computeAngles(f);
+    const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_lean");
+    expect(out[idx]).toBeCloseTo(0, 3);
+  });
+
+  it("trunk lean ~ 45° when torso leans forward 45°", () => {
+    // Shoulder midpoint pushed forward (+z) by the same amount it is above hips.
+    const f = mkFrame({
+      [L.LEFT_SHOULDER]: [-0.2, 2, 1],
+      [L.RIGHT_SHOULDER]: [0.2, 2, 1],
+      [L.LEFT_HIP]: [-0.2, 1, 0],
+      [L.RIGHT_HIP]: [0.2, 1, 0],
+    });
+    const out = computeAngles(f);
+    const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_lean");
+    expect(out[idx]).toBeCloseTo(45, 3);
+  });
+
+  it("trunk lean is invariant to camera yaw (rotation about vertical)", () => {
+    const base = mkFrame({
+      [L.LEFT_SHOULDER]: [-0.2, 2, 0.7],
+      [L.RIGHT_SHOULDER]: [0.2, 2, 0.7],
+      [L.LEFT_HIP]: [-0.2, 1, 0],
+      [L.RIGHT_HIP]: [0.2, 1, 0],
+    });
+    const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_lean");
+    const leanBase = computeAngles(base)[idx];
+    // Rotate the whole pose 50° about the vertical (y) axis — a pure change of
+    // camera facing. Trunk lean (measured against gravity) must not move.
+    const theta = (50 * Math.PI) / 180;
+    const cos = Math.cos(theta);
+    const sin = Math.sin(theta);
+    const rotated: PoseFrame = base.map((p) => ({
+      x: p.x * cos + p.z * sin,
+      y: p.y,
+      z: -p.x * sin + p.z * cos,
+      visibility: p.visibility,
+    }));
+    const leanRot = computeAngles(rotated)[idx];
+    expect(leanRot).toBeCloseTo(leanBase, 3);
+  });
+
+  it("detectUpSign: -1 for y-down (MediaPipe) world coords, +1 for y-up", () => {
+    // y-DOWN: shoulders physically above hips => smaller (more negative) y.
+    const down = mkFrame({
+      [L.LEFT_SHOULDER]: [-0.2, -0.5, 0],
+      [L.RIGHT_SHOULDER]: [0.2, -0.5, 0],
+      [L.LEFT_HIP]: [-0.2, 0, 0],
+      [L.RIGHT_HIP]: [0.2, 0, 0],
+    });
+    expect(detectUpSign([down, down, down])).toBe(-1);
+    const up = mkFrame({
+      [L.LEFT_SHOULDER]: [-0.2, 2, 0],
+      [L.RIGHT_SHOULDER]: [0.2, 2, 0],
+      [L.LEFT_HIP]: [-0.2, 1, 0],
+      [L.RIGHT_HIP]: [0.2, 1, 0],
+    });
+    expect(detectUpSign([up, up, up])).toBe(1);
+  });
+
+  it("trunk lean reads ~upright for y-DOWN data via computeAnglesSequence", () => {
+    // Near-upright torso with a slight forward (+z) lean, in MediaPipe's y-DOWN
+    // world frame (shoulders above hips => negative y).
+    const f = mkFrame({
+      [L.LEFT_SHOULDER]: [-0.2, -1, 0.1],
+      [L.RIGHT_SHOULDER]: [0.2, -1, 0.1],
+      [L.LEFT_HIP]: [-0.2, 0, 0],
+      [L.RIGHT_HIP]: [0.2, 0, 0],
+    });
+    const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_lean");
+    const seq = computeAnglesSequence([f, f, f]);
+    expect(seq[0][idx]).toBeLessThan(20); // small lean — NOT the ~180° sign-flip
+    // The per-frame default (upSign = +1) would mis-read the same data as inverted.
+    expect(computeAngles(f)[idx]).toBeGreaterThan(150);
   });
 
   it("trunk rotation ~ 90° when shoulders rotated 90° to hips", () => {

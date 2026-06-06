@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IMAGE-vs-VIDEO Mode Probe</title>
+    <style>
+      html, body { margin: 0; background: #07090e; color: #d8e0f0; }
+      body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      #status { position: sticky; top: 0; padding: 8px 14px; background: #0d1118; border-bottom: 1px solid #1d2533; font-size: 13px; }
+      #out { padding: 14px; white-space: pre-wrap; font-size: 12px; line-height: 1.45; }
+    </style>
+  </head>
+  <body>
+    <div id="status">probe loading…</div>
+    <div id="out"></div>
+    <script type="module" src="/src/modeprobe.ts"></script>
+  </body>
+</html>

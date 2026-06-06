@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pipeline Validation Harness</title>
+    <style>
+      html, body { margin: 0; background: #07090e; color: #d8e0f0; }
+      body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      #status { position: sticky; top: 0; padding: 8px 14px; background: #0d1118; border-bottom: 1px solid #1d2533; font-size: 13px; }
+      #out { padding: 14px; white-space: pre-wrap; font-size: 12px; line-height: 1.45; }
+      .ok { color: #58d68d; } .warn { color: #f5b041; } .bad { color: #ec7063; }
+      h2 { color: #7aa2f7; font-size: 14px; margin: 18px 0 6px; }
+    </style>
+  </head>
+  <body>
+    <div id="status">harness loading…</div>
+    <div id="out"></div>
+    <script type="module" src="/src/harness.ts"></script>
+  </body>
+</html>

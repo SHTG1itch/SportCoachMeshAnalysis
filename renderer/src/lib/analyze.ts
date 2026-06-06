@@ -5,6 +5,7 @@ import type {
 } from "@shared/types";
 import type { PoseFrame } from "./pose/types";
 import { compare } from "./pose/compare";
+import { generateGuideAndWorkouts } from "./coach";
 import {
   detectImage,
   extractVideo,
@@ -111,8 +112,12 @@ export async function runAnalysis(
     progress: 0.92,
   });
 
+  // Computed natively on-device — no API key, no network call. This is a pure,
+  // synchronous function over the numeric report, so it always succeeds; the
+  // guarded call is defense-in-depth only (a thrown error here would be a
+  // deterministic bug, surfaced by the unit tests, not a transient failure).
   try {
-    const res = await window.app.generateGuideAndWorkouts({
+    const res = generateGuideAndWorkouts({
       sport: input.sport,
       shot: input.shot,
       numericReport: {
@@ -120,13 +125,15 @@ export async function runAnalysis(
         jointDeltas: report.jointDeltas,
         phases: report.phases,
         mode: report.mode,
+        handedness: report.handedness,
       },
     });
     report.guide = res.guide;
     report.workouts = res.workouts;
   } catch (e) {
-    console.error("LLM step failed:", e);
-    // We still return the numeric report; the UI will show a retry button.
+    console.error("Guide generation failed:", e);
+    // Leave guide null / workouts empty; the result screen offers a manual
+    // re-generate button (which also persists the result).
   }
 
   // Release media element resources.

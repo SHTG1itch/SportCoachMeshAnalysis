@@ -14,6 +14,22 @@ type RunningMode = "IMAGE" | "VIDEO";
 
 const landmarkers: Partial<Record<RunningMode, Promise<PoseLandmarker>>> = {};
 
+/**
+ * Strictly-increasing timestamp clock for the shared VIDEO-mode landmarker.
+ *
+ * MediaPipe's `detectForVideo` requires timestamps that increase monotonically
+ * across every call to a given landmarker instance — and we cache + reuse one
+ * VIDEO landmarker for the whole session (see `getLandmarker`). A single
+ * analysis calls `extractVideo` twice: once for the pro clip, once for the
+ * user clip. If each clip derived its timestamps from its own local media time
+ * (which restarts at ~0), the second clip would feed timestamps that run
+ * *backwards* relative to the landmarker's internal clock, and MediaPipe rejects
+ * them with "Packet timestamp mismatch", aborting the entire comparison. We
+ * therefore offset every clip's timestamps to start just past the previous
+ * clip's last one. Reset to 0 whenever the landmarker is torn down.
+ */
+let videoClock = 0;
+
 async function getLandmarker(mode: RunningMode): Promise<PoseLandmarker> {
   const existing = landmarkers[mode];
   if (existing) return existing;
@@ -48,6 +64,9 @@ export async function resetLandmarker(): Promise<void> {
     }
     delete landmarkers[key];
   }
+  // A freshly-created VIDEO landmarker starts its internal clock at 0, so our
+  // monotonic offset must reset alongside it.
+  videoClock = 0;
 }
 
 function emptyFrame(): PoseFrame {
@@ -119,12 +138,14 @@ export async function extractVideo(
   if (!ctx) throw new Error("Could not get 2D canvas context for frame extraction");
 
   const frames: PoseFrame[] = [];
-  let lastTs = 0;
+  // Continue the shared monotonic clock past the previous clip (see videoClock).
+  const base = videoClock;
+  let lastTs = base;
   for (let i = 0; i < total; i++) {
     const t = (i + 0.5) / total * duration;
     await seekTo(video, t);
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    let ts = Math.round(t * 1000);
+    let ts = base + Math.round(t * 1000);
     if (ts <= lastTs) ts = lastTs + 1;
     lastTs = ts;
     const res = lm.detectForVideo(canvas, ts);
@@ -132,6 +153,9 @@ export async function extractVideo(
     frames.push(f ?? emptyFrame());
     opts.onProgress?.({ completed: (i + 1) / total, frame: i + 1, totalFrames: total });
   }
+  // Advance the shared clock so the next clip's timestamps start strictly above
+  // this clip's last one.
+  videoClock = lastTs + 1;
   return { frames, fps, duration };
 }
 

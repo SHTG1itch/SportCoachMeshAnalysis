@@ -3,8 +3,6 @@ import type {
   AnalysisRecord,
   AppApi,
   AppSettings,
-  GuideRequest,
-  GuideResponse,
   SavedWorkout,
 } from "../shared/types";
 
@@ -17,9 +15,6 @@ const api: AppApi = {
   saveWorkout: (w: SavedWorkout) => ipcRenderer.invoke("workout:save", w),
   listWorkouts: () => ipcRenderer.invoke("workout:list"),
   deleteWorkout: (id: string) => ipcRenderer.invoke("workout:delete", id),
-
-  generateGuideAndWorkouts: (req: GuideRequest): Promise<GuideResponse> =>
-    ipcRenderer.invoke("llm:guide", req),
 
   getSettings: () => ipcRenderer.invoke("settings:get"),
   setSettings: (s: Partial<AppSettings>) => ipcRenderer.invoke("settings:set", s),

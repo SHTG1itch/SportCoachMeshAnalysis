@@ -1,0 +1,19 @@
+STATUS: DONE
+Shared-landmarker topology probe — reproduces the app's pro→user single-landmarker extraction with the videoClock fix.
+
+[SHARED] one VIDEO landmarker, no reset between passes:
+  pass A (pro novak_fh): 150 frames, endClock=4989
+  pass B (user timo_fh): 120 frames (clock continued from pro — the real app topology)
+  baseline (fresh user timo_fh): 120 frames
+
+[CONTAMINATION] shared-topology user frames vs fresh user frames:
+  first 5 frames: f1:L2=0.570,ang=115.917°  f2:L2=0.034,ang=3.512°  f3:L2=0.018,ang=2.930°  f4:L2=0.011,ang=2.536°  f5:L2=0.017,ang=2.132°
+  whole clip: mean L2=0.016m  mean ang=2.365°  maxL2=0.570  maxAng=115.917°
+
+[REAL RUBRIC] novak(pro) vs timo(user), shared-topology vs fresh user extraction:
+  SHARED: sim=0.572 5h/1m handedness={"pro":"left","user":"right","mirrored":true}
+  FRESH : sim=0.569 5h/1m handedness={"pro":"left","user":"right","mirrored":true}
+  Δsim = 0.003
+  VERDICT: ✓ shared-landmarker topology does NOT change the rubric — parity holds under the app's actual extraction
+
+===== DONE =====

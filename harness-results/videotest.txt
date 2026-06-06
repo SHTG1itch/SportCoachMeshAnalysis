@@ -1,0 +1,19 @@
+STATUS: part 2
+===== PART 1: fixed monotonic-clock scheme (canvas, no <video>) =====
+  PASS A "pro" (clock from 0)
+  PASS A (novak_a): detected=40 undetected=0 threw=0
+  PASS B "user" on SAME landmarker (clock CONTINUED — the fix)
+  PASS B (timo_fh): detected=40 undetected=0 threw=0
+  VERDICT: ✓ fixed scheme accepted by MediaPipe (no throws on the user pass)
+
+===== PART 2: real runAnalysis(proKind="video") on <video> decode =====
+  pro=novak_a.mp4 (1405700B)  user=raw_timo.mp4 (4579587B)
+  ⚠ watchdog: no progress for 30s (last: "") — possible <video> decode throttle
+  ⚠ watchdog: no progress for 40s (last: "") — possible <video> decode throttle
+  ⚠ watchdog: no progress for 50s (last: "") — possible <video> decode throttle
+  ⚠ watchdog: no progress for 60s (last: "") — possible <video> decode throttle
+  ⚠ watchdog: no progress for 99s (last: "") — possible <video> decode throttle
+  ⚠ watchdog: no progress for 159s (last: "") — possible <video> decode throttle
+  ⚠ watchdog: no progress for 219s (last: "") — possible <video> decode throttle
+  ⚠ watchdog: no progress for 279s (last: "") — possible <video> decode throttle
+  ⚠ watchdog: no progress for 339s (last: "") — possible <video> decode throttle

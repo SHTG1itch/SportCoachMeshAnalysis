@@ -1,0 +1,4 @@
+STATUS: loading pro…
+Harness config: pro=/testclips/novak_a.mp4 user=/testclips/novak_a.mp4 sport=tennis shot=Forehand proKind=video maxFrames=120 selftest=true
+· fetchFile start /testclips/novak_a.mp4
+· fetchFile got blob /testclips/novak_a.mp4 1405700 video/mp4

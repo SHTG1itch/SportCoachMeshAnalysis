@@ -16,7 +16,7 @@ export const JOINT_FEATURES: { name: JointName; label: string }[] = [
   { name: "left_ankle", label: "Left ankle dorsiflexion" },
   { name: "right_ankle", label: "Right ankle dorsiflexion" },
   { name: "trunk_rotation", label: "Trunk rotation (shoulders vs hips)" },
-  { name: "hip_rotation", label: "Hip rotation (yaw)" },
+  { name: "trunk_lean", label: "Trunk lean (torso vs vertical)" },
   { name: "shoulder_line_tilt", label: "Shoulder line tilt" },
 ];
 
@@ -28,8 +28,17 @@ function asVec(p: { x: number; y: number; z: number }): Vec3 {
  * Compute one feature vector of joint angles (degrees) for a single pose frame.
  * Order matches JOINT_FEATURES. Returns 0 for landmarks with low visibility
  * so downstream code can treat missing data as "no signal".
+ *
+ * `upSign` selects which y direction is "up" (towards the head). It is +1 for a
+ * y-up coordinate convention and -1 for y-down. MediaPipe's world landmarks are
+ * y-DOWN (the head sits at negative y, the feet at positive y), so trunk_lean —
+ * the only feature measured against gravity with a *signed* reference — must use
+ * upSign = -1 to read ~0° for an upright athlete instead of ~180°. The default
+ * of +1 keeps the y-up unit-test fixtures valid; callers that have a whole clip
+ * (computeAnglesSequence) infer it from the data so the value and its sign are
+ * correct regardless of the source convention.
  */
-export function computeAngles(frame: PoseFrame): number[] {
+export function computeAngles(frame: PoseFrame, upSign: number = 1): number[] {
   const out: number[] = [];
   const getV = (i: number): Vec3 => asVec(frame[i]);
 
@@ -81,17 +90,35 @@ export function computeAngles(frame: PoseFrame): number[] {
   out.push(ankle(L.RIGHT_KNEE, L.RIGHT_ANKLE, L.RIGHT_FOOT_INDEX));
 
   // Trunk rotation: yaw angle between shoulder-line and hip-line projected onto
-  // the horizontal plane (axis = vertical).
+  // the horizontal plane (axis = vertical). This is the "X-factor" separation —
+  // unsigned, so it is invariant to which way the athlete faces the camera.
   const shoulderLine = sub(getV(L.RIGHT_SHOULDER), getV(L.LEFT_SHOULDER));
   const hipLine = sub(getV(L.RIGHT_HIP), getV(L.LEFT_HIP));
-  const vertical: Vec3 = { x: 0, y: 1, z: 0 };
+  // "Up" (towards the head). Sign depends on the coordinate convention; see the
+  // computeAngles doc comment. shoulder_line_tilt below is |90 - angle| so it is
+  // sign-invariant, but trunk_lean is not.
+  const vertical: Vec3 = { x: 0, y: upSign, z: 0 };
   // Project both onto horizontal plane (remove y component) and measure unsigned angle.
   const shFlat: Vec3 = { x: shoulderLine.x, y: 0, z: shoulderLine.z };
   const hipFlat: Vec3 = { x: hipLine.x, y: 0, z: hipLine.z };
   out.push(angleBetweenDeg(shFlat, hipFlat));
 
-  // Hip rotation (yaw): angle of hip-line vs world x-axis in horizontal plane.
-  out.push(angleBetweenDeg(hipFlat, { x: 1, y: 0, z: 0 }));
+  // Trunk lean: angle between the torso axis (hip midpoint -> shoulder midpoint)
+  // and vertical. 0 = perfectly upright, larger = more forward/lateral lean.
+  // Measured against gravity (vertical), so unlike the old absolute hip yaw this
+  // is independent of camera facing and carries real coaching meaning (posture /
+  // spine angle) that compares validly between two differently-filmed clips.
+  const shMid: Vec3 = {
+    x: (getV(L.LEFT_SHOULDER).x + getV(L.RIGHT_SHOULDER).x) / 2,
+    y: (getV(L.LEFT_SHOULDER).y + getV(L.RIGHT_SHOULDER).y) / 2,
+    z: (getV(L.LEFT_SHOULDER).z + getV(L.RIGHT_SHOULDER).z) / 2,
+  };
+  const hipMid: Vec3 = {
+    x: (getV(L.LEFT_HIP).x + getV(L.RIGHT_HIP).x) / 2,
+    y: (getV(L.LEFT_HIP).y + getV(L.RIGHT_HIP).y) / 2,
+    z: (getV(L.LEFT_HIP).z + getV(L.RIGHT_HIP).z) / 2,
+  };
+  out.push(angleBetweenDeg(sub(shMid, hipMid), vertical));
 
   // Shoulder line tilt: angle between shoulder line and horizontal.
   // 0 = perfectly level, 90 = vertical.
@@ -116,6 +143,31 @@ export function computeAngles(frame: PoseFrame): number[] {
   return out;
 }
 
+/**
+ * Infer which y direction points "up" (towards the head) for a whole clip, from
+ * the median vertical offset of the shoulders relative to the hips. Using the
+ * median over the clip (rather than per frame) keeps it robust to individual
+ * frames where the athlete is deeply hinged or mid-air. Returns +1 for y-up and
+ * -1 for y-down; defaults to +1 when there is no usable signal.
+ */
+export function detectUpSign(frames: PoseFrame[]): number {
+  const dys: number[] = [];
+  for (const f of frames) {
+    const ls = f[L.LEFT_SHOULDER];
+    const rs = f[L.RIGHT_SHOULDER];
+    const lh = f[L.LEFT_HIP];
+    const rh = f[L.RIGHT_HIP];
+    if (!ls || !rs || !lh || !rh) continue;
+    if (ls.visibility < 0.3 || rs.visibility < 0.3 || lh.visibility < 0.3 || rh.visibility < 0.3) continue;
+    dys.push((ls.y + rs.y) / 2 - (lh.y + rh.y) / 2);
+  }
+  if (dys.length === 0) return 1;
+  dys.sort((a, b) => a - b);
+  const med = dys[Math.floor(dys.length / 2)];
+  return med < 0 ? -1 : 1;
+}
+
 export function computeAnglesSequence(frames: PoseFrame[]): number[][] {
-  return frames.map(computeAngles);
+  const upSign = detectUpSign(frames);
+  return frames.map((f) => computeAngles(f, upSign));
 }

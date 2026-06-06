@@ -10,11 +10,9 @@ import {
   saveWorkout,
   setSettings,
 } from "./db";
-import { generateGuideAndWorkouts } from "./llm";
 import type {
   AnalysisRecord,
   AppSettings,
-  GuideRequest,
   SavedWorkout,
 } from "../shared/types";
 
@@ -27,10 +25,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle("workout:save", (_e, w: SavedWorkout) => saveWorkout(w));
   ipcMain.handle("workout:list", () => listWorkouts());
   ipcMain.handle("workout:delete", (_e, id: string) => deleteWorkout(id));
-
-  ipcMain.handle("llm:guide", async (_e, req: GuideRequest) => {
-    return generateGuideAndWorkouts(req);
-  });
 
   ipcMain.handle("settings:get", () => getSettings());
   ipcMain.handle("settings:set", (_e, s: Partial<AppSettings>) => setSettings(s));

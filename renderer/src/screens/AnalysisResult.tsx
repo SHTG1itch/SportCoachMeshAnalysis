@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { ArrowLeft, RefreshCw, Save, Sparkles, Trash2 } from "lucide-react";
 import type { AnalysisRecord, SavedWorkout, Workout } from "@shared/types";
+import { generateGuideAndWorkouts } from "../lib/coach";
 import { DeltaChart } from "../components/DeltaChart";
 import { JointBreakdown } from "../components/JointBreakdown";
 import { GuideView } from "../components/GuideView";
@@ -31,7 +32,7 @@ export function AnalysisResult({ record }: { record: AnalysisRecord }) {
     setRegenerating(true);
     setRegenError(null);
     try {
-      const res = await window.app.generateGuideAndWorkouts({
+      const res = generateGuideAndWorkouts({
         sport: report.sport,
         shot: report.shot,
         numericReport: {
@@ -39,6 +40,7 @@ export function AnalysisResult({ record }: { record: AnalysisRecord }) {
           jointDeltas: report.jointDeltas,
           phases: report.phases,
           mode: report.mode,
+          handedness: report.handedness,
         },
       });
       const updated: AnalysisRecord = {
@@ -122,6 +124,22 @@ export function AnalysisResult({ record }: { record: AnalysisRecord }) {
               <DeltaChart timeline={report.alignment.similarityTimeline} />
             </div>
           )}
+          {report.handedness?.mirrored && (
+            <div className="text-xs text-ink-300 mt-2">
+              Mirrored comparison: your {report.handedness.user}-dominant motion was
+              flipped to match the {report.handedness.pro}-handed reference, so
+              left/right labels follow the pro's body.
+            </div>
+          )}
+          {report.coverage &&
+            (report.coverage.pro < 0.8 || report.coverage.user < 0.8) && (
+              <div className="text-xs text-warn mt-2">
+                Low pose detection ({Math.round(report.coverage.pro * 100)}% pro,{" "}
+                {Math.round(report.coverage.user * 100)}% you). Gaps were
+                interpolated — results are less reliable. Try clearer, full-body
+                footage.
+              </div>
+            )}
         </div>
       </div>
 
@@ -167,7 +185,7 @@ export function AnalysisResult({ record }: { record: AnalysisRecord }) {
                       <div className="text-xs text-ink-300 mt-1">
                         Biggest delta:{" "}
                         <span className="text-ink-100">{p.topDeltas[0].label}</span> · Δ{" "}
-                        {p.topDeltas[0].meanDeltaDeg.toFixed(1)}°
+                        {Math.abs(p.topDeltas[0].signedBiasDeg).toFixed(1)}°
                       </div>
                     )}
                   </li>
@@ -196,8 +214,8 @@ export function AnalysisResult({ record }: { record: AnalysisRecord }) {
             <div className="card p-8 text-center">
               <Sparkles className="mx-auto text-accent-400 mb-3" />
               <div className="text-sm text-ink-100 mb-3">
-                No coaching guide yet. This usually means the LLM step didn't run (missing
-                API key?) or failed.
+                No coaching guide yet — generate one from your comparison. It's computed
+                on-device, free, and takes a moment.
               </div>
               {regenError && (
                 <div className="text-xs text-bad mb-3">{regenError}</div>

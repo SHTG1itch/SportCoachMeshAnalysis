@@ -36,7 +36,7 @@ export type JointName =
   | "left_ankle"
   | "right_ankle"
   | "trunk_rotation"
-  | "hip_rotation"
+  | "trunk_lean"
   | "shoulder_line_tilt";
 
 export interface JointDelta {
@@ -49,6 +49,13 @@ export interface JointDelta {
   /** +ve means user is over-rotated vs pro; -ve under-rotated. */
   signedBiasDeg: number;
   significance: "low" | "medium" | "high";
+}
+
+export interface Handedness {
+  pro: "left" | "right";
+  user: "left" | "right";
+  /** True when the user's pose was mirrored to match the pro's dominant side. */
+  mirrored: boolean;
 }
 
 export interface PhaseSummary {
@@ -80,6 +87,21 @@ export interface AnalysisReport {
   } | null;
   /** For single_frame mode: the user frame index that best matched the pro image. */
   keyUserFrame: number | null;
+  /**
+   * Dominant-side handedness inferred for each athlete and whether the user's
+   * angles were mirrored to the pro's convention before comparison. When
+   * `mirrored` is true, per-joint "left/right" labels follow the PRO's body;
+   * the user's matching limb is the opposite side. Optional for backward
+   * compatibility with records saved before this field existed.
+   */
+  handedness?: Handedness;
+  /**
+   * Fraction (0..1) of frames in which the core torso was actually detected,
+   * per clip. Low values mean the comparison leaned heavily on interpolation
+   * and should be read with caution. Optional for backward compatibility with
+   * records saved before this field existed.
+   */
+  coverage?: { pro: number; user: number };
   overallSimilarity: number; // 0..1
   jointDeltas: JointDelta[];
   phases: PhaseSummary[];
@@ -158,9 +180,6 @@ export interface AppApi {
   listWorkouts(): Promise<SavedWorkout[]>;
   deleteWorkout(id: string): Promise<void>;
 
-  // LLM
-  generateGuideAndWorkouts(req: GuideRequest): Promise<GuideResponse>;
-
   // Settings
   getSettings(): Promise<AppSettings>;
   setSettings(s: Partial<AppSettings>): Promise<AppSettings>;
@@ -177,6 +196,7 @@ export interface GuideRequest {
     jointDeltas: JointDelta[];
     phases: PhaseSummary[];
     mode: "sequence" | "single_frame";
+    handedness?: Handedness;
   };
 }
 
@@ -186,8 +206,6 @@ export interface GuideResponse {
 }
 
 export interface AppSettings {
-  anthropicApiKey: string | null;
-  model: string;
   theme: "dark" | "light";
 }
 

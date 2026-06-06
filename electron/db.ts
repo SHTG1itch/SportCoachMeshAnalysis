@@ -41,6 +41,13 @@ export function initDb(): Database.Database {
       value TEXT NOT NULL
     );
   `);
+  // One-time migration: the app is fully offline now and no longer stores an
+  // Anthropic API key or model choice. Remove any legacy rows from older DBs so
+  // the settings shape matches the current AppSettings. (A plain DELETE is the
+  // right tool here — secure freelist scrubbing was considered and deferred:
+  // the key was always plaintext in SQLite by design, so it's out of scope, and
+  // VACUUM can't run inside a transaction, which would risk startup.)
+  db.prepare(`DELETE FROM settings WHERE key IN ('anthropicApiKey','model')`).run();
   return db;
 }
 
@@ -169,8 +176,6 @@ export function deleteWorkout(id: string): void {
 // ---- Settings ----
 
 const DEFAULT_SETTINGS: AppSettings = {
-  anthropicApiKey: null,
-  model: "claude-opus-4-7",
   theme: "dark",
 };
 
@@ -183,8 +188,6 @@ export function getSettings(): AppSettings {
   const out: Record<string, string> = {};
   for (const r of rows) out[r.key] = r.value;
   return {
-    anthropicApiKey: out.anthropicApiKey ?? DEFAULT_SETTINGS.anthropicApiKey,
-    model: out.model ?? DEFAULT_SETTINGS.model,
     theme: (out.theme as AppSettings["theme"]) ?? DEFAULT_SETTINGS.theme,
   };
 }
@@ -198,8 +201,6 @@ export function setSettings(partial: Partial<AppSettings>): AppSettings {
      ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
   );
   const tx = d.transaction((s: AppSettings) => {
-    upsert.run("anthropicApiKey", s.anthropicApiKey ?? "");
-    upsert.run("model", s.model);
     upsert.run("theme", s.theme);
   });
   tx(next);

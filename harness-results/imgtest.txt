@@ -1,0 +1,18 @@
+STATUS: DONE
+===== PRO-AS-IMAGE single_frame end-to-end (real detectImage + compare + coach) =====
+  pro image loaded: 1280x720
+  ✓ detectImage(HTMLImageElement) detected a pose (core-detected=true)
+  user frames: 120 (detected 120)
+
+  RESULT:
+    mode=single_frame  (expected single_frame)
+    keyUserFrame=116  alignment=null (correct)  phases=0
+    overallSimilarity=0.569  handedness={"pro":"left","user":"right","mirrored":true}
+    top deltas: right_hip bias-57.190(high), left_ankle bias-45.890(high), left_shoulder bias37.320(high), right_shoulder bias-27.210(high)
+    guide.summary: Your Forehand reaches 57% overall similarity to the pro, with 6 areas worth addressing. The biggest is your Hip (57° off). Power flows from the legs up through trunk rotation into the racket arm.
+    keyIssues: Hip: too little vs the pro | Ankle: too little vs the pro | Shoulder: too much vs the pro | Elbow: too little vs the pro
+    workouts: Mobility & activation | Corrective strength | Skill & sequencing
+
+  VERDICT: ✓ pro-as-image resolves single_frame mode, a best-matching user frame, handedness, guide + workouts
+
+===== DONE =====
