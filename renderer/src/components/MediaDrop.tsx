@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { Upload, Film, Image as ImageIcon, X } from "lucide-react";
 
@@ -109,17 +109,19 @@ export function MediaDrop({ label, accept, file, onChange, hint }: Props) {
 }
 
 function useFileObjectUrl(file: File | null): string | null {
-  const ref = useRef<{ file: File; url: string } | null>(null);
-  if (!file) {
-    if (ref.current) {
-      URL.revokeObjectURL(ref.current.url);
-      ref.current = null;
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file) {
+      setUrl(null);
+      return;
     }
-    return null;
-  }
-  if (!ref.current || ref.current.file !== file) {
-    if (ref.current) URL.revokeObjectURL(ref.current.url);
-    ref.current = { file, url: URL.createObjectURL(file) };
-  }
-  return ref.current.url;
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    // Revoke when the file changes AND on unmount. The previous render-time ref
+    // approach never revoked on unmount, so navigating away from New Analysis
+    // with a clip still selected leaked its blob URL (and backing media buffer)
+    // for the lifetime of the renderer window.
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+  return url;
 }

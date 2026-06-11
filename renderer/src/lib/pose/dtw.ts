@@ -35,7 +35,17 @@ export function dtw(
   if (n === 0 || m === 0) return { path: [], distance: Infinity };
   const distFn = opts.distance ?? euclidean;
   const bandRatio = opts.bandRatio ?? 0.25;
-  const band = Math.max(2, Math.floor(Math.max(n, m) * bandRatio));
+  // The band must always admit the diagonal that joins the two corners (0,0) and
+  // (n,m). A cell (i,j) is only relaxed when |i - j| <= band, so the endpoint
+  // (n,m) is reachable only if |n - m| <= band. With a purely ratio-derived band
+  // a clip pair differing in length by more than `bandRatio` (different durations
+  // OR capture fps — e.g. a 30fps vs 60fps phone clip of the same motion) leaves
+  // cost[n][m] = Infinity, and the backtrack then walks the all-Infinity off-band
+  // region, emitting a degenerate path that drops one clip's unmatched frames and
+  // collapses the similarity score. Flooring the band at |n - m| guarantees the
+  // endpoint is always feasible while preserving the off-diagonal constraint for
+  // similar-length clips.
+  const band = Math.max(2, Math.abs(n - m), Math.floor(Math.max(n, m) * bandRatio));
 
   const INF = Number.POSITIVE_INFINITY;
   // Allocate a flat Float64 cost matrix for speed.

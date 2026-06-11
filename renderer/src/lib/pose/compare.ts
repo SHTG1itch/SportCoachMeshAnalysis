@@ -7,7 +7,11 @@ import type {
   SportMeta,
 } from "@shared/types";
 import type { PoseFrame } from "./types";
-import { JOINT_FEATURES, computeAnglesSequence } from "./angles";
+import {
+  JOINT_FEATURES,
+  computeAnglesSequence,
+  featureConfidenceSequence,
+} from "./angles";
 import { normalizeAll } from "./normalize";
 import { fillGaps, smoothFrames, detectionCoverage } from "./prepare";
 import { L } from "./types";
@@ -83,6 +87,77 @@ function percentile(xs: number[], p: number): number {
   const s = [...xs].sort((a, b) => a - b);
   const idx = Math.min(n - 1, Math.max(0, Math.round((n - 1) * p)));
   return s[idx];
+}
+
+/**
+ * Confidence-weighted trimmed mean. Samples are sorted by value and the lowest
+ * and highest `trim` fraction of TOTAL WEIGHT (not sample count) is discarded —
+ * fractionally at the boundaries — before taking the weighted mean of what
+ * remains. With uniform weights this reduces to the plain trimmed mean; with
+ * confidence weights, a low-visibility (motion-blurred / occluded) frame's
+ * detector guess contributes proportionally less to the reported statistic.
+ * Falls back to the unweighted path when the weights carry no signal (all 0).
+ */
+export function weightedTrimmedMean(
+  xs: number[],
+  ws: number[],
+  trim = 0.1,
+): number {
+  const n = xs.length;
+  if (n === 0) return 0;
+  let W = 0;
+  for (let i = 0; i < n; i++) W += ws[i];
+  if (!(W > 0)) return trimmedMean(xs, trim);
+  const order = xs.map((_, i) => i).sort((a, b) => xs[a] - xs[b]);
+  if (n < 6) {
+    // Too few samples to trim meaningfully — plain weighted mean (mirrors the
+    // unweighted trimmedMean's small-n fallback).
+    let s = 0;
+    for (let i = 0; i < n; i++) s += xs[i] * ws[i];
+    return s / W;
+  }
+  const lo = W * trim;
+  const hi = W * (1 - trim);
+  let cum = 0;
+  let sum = 0;
+  let effW = 0;
+  for (const i of order) {
+    const start = cum;
+    cum += ws[i];
+    // Effective weight = the part of this sample's weight interval that falls
+    // inside the kept band [lo, hi].
+    const eff = Math.min(cum, hi) - Math.max(start, lo);
+    if (eff > 0) {
+      sum += xs[i] * eff;
+      effW += eff;
+    }
+  }
+  return effW > 0 ? sum / effW : trimmedMean(xs, trim);
+}
+
+/**
+ * Confidence-weighted percentile: smallest value whose cumulative weight
+ * reaches `p` of the total. Uniform weights reproduce the nearest-rank
+ * percentile to within one sample; zero total weight falls back to unweighted.
+ */
+export function weightedPercentile(
+  xs: number[],
+  ws: number[],
+  p: number,
+): number {
+  const n = xs.length;
+  if (n === 0) return 0;
+  let W = 0;
+  for (let i = 0; i < n; i++) W += ws[i];
+  if (!(W > 0)) return percentile(xs, p);
+  const order = xs.map((_, i) => i).sort((a, b) => xs[a] - xs[b]);
+  const target = W * p;
+  let cum = 0;
+  for (const i of order) {
+    cum += ws[i];
+    if (cum >= target) return xs[i];
+  }
+  return xs[order[n - 1]];
 }
 
 /**
@@ -183,11 +258,20 @@ function sortedByImpact(deltas: JointDelta[]): JointDelta[] {
 
 /**
  * Build a JointDelta row from paired-sample angle arrays for that joint.
+ *
+ * `weights` (optional, same length as the angle arrays) carries the per-pair
+ * detection confidence for this joint — min of the pro and user frame's
+ * feature confidence (see featureConfidence). Every statistic, including the
+ * signed bias that drives significance, is confidence-weighted: a stretch of
+ * frames where the wrist is motion-blurred or hidden behind the body produces
+ * detector guesses that previously voted with full strength and could fabricate
+ * (or mask) a systematic offset. With no weights all samples count equally.
  */
 function buildDelta(
   featureIdx: number,
   proAngles: number[],
   userAngles: number[],
+  weights?: number[],
 ): JointDelta {
   const feat = JOINT_FEATURES[featureIdx];
   const n = Math.min(proAngles.length, userAngles.length);
@@ -207,26 +291,28 @@ function buildDelta(
   const signed: number[] = [];
   const pros: number[] = [];
   const users: number[] = [];
+  const ws: number[] = [];
   for (let i = 0; i < n; i++) {
     const d = userAngles[i] - proAngles[i];
     diffsAbs.push(Math.abs(d));
     signed.push(d);
     pros.push(proAngles[i]);
     users.push(userAngles[i]);
+    ws.push(weights ? weights[i] : 1);
   }
   // Robust statistics so a handful of bad frames (detection errors, DTW
   // mis-pairings) can't dominate. meanDeltaDeg is a trimmed mean of the absolute
   // gap; maxDeltaDeg is the 90th percentile ("worst typical" rather than a
   // single-frame spike). Means/bias use trimmed means too. All stay in degrees.
-  const meanAbs = trimmedMean(diffsAbs, 0.1);
-  const signedBias = trimmedMean(signed, 0.1);
+  const meanAbs = weightedTrimmedMean(diffsAbs, ws, 0.1);
+  const signedBias = weightedTrimmedMean(signed, ws, 0.1);
   return {
     joint: feat.name,
     label: feat.label,
     meanDeltaDeg: +meanAbs.toFixed(2),
-    maxDeltaDeg: +percentile(diffsAbs, 0.9).toFixed(2),
-    proMeanDeg: +trimmedMean(pros, 0.1).toFixed(2),
-    userMeanDeg: +trimmedMean(users, 0.1).toFixed(2),
+    maxDeltaDeg: +weightedPercentile(diffsAbs, ws, 0.9).toFixed(2),
+    proMeanDeg: +weightedTrimmedMean(pros, ws, 0.1).toFixed(2),
+    userMeanDeg: +weightedTrimmedMean(users, ws, 0.1).toFixed(2),
     signedBiasDeg: +signedBias.toFixed(2),
     // Significance is driven by the systematic offset (|bias|), not the
     // noise-inflated mean abs delta — see significance().
@@ -257,6 +343,14 @@ export function compare(input: CompareInput): AnalysisReport {
   const userFrames = normalizeAll(smoothFrames(fillGaps(input.user.frames)));
   const proAngles = repairImplausibleFrames(computeAnglesSequence(proFrames));
   const userAnglesRaw = repairImplausibleFrames(computeAnglesSequence(userFrames));
+  // Per-frame, per-feature detection confidence, from the RAW frames so
+  // gap-filled (synthetic) samples keep their honest low visibility. Frame
+  // counts are preserved by the cleanup steps, so indices line up with the
+  // angle sequences. Confidence vectors mirror with the same column swaps as
+  // the angle vectors.
+  const proConf = featureConfidenceSequence(input.pro.frames);
+  const userConfRaw = featureConfidenceSequence(input.user.frames);
+  const userConfMirrored = mirrorAnglesSequence(userConfRaw);
 
   const mode: "sequence" | "single_frame" =
     input.pro.kind === "image" || proAngles.length <= 2 ? "single_frame" : "sequence";
@@ -286,12 +380,18 @@ export function compare(input: CompareInput): AnalysisReport {
 
   let pairedPro: number[][] = [];
   let pairedUser: number[][] = [];
+  // Per-pair, per-feature weight: a pairing is only as reliable as the less
+  // visible of its two frames, so weight = min(pro conf, user conf).
+  let pairedW: number[][] = [];
+  const pairWeight = (confA: number[], confB: number[]): number[] =>
+    JOINT_FEATURES.map((_, f) => Math.min(confA[f], confB[f]));
 
   if (mode === "sequence") {
     // Both clips are videos: dominant side is well-defined from motion energy.
     proSide = detectDominantSide(proFrames, keyType);
     mirrored = proSide !== userSide;
     userAngles = mirrored ? userAnglesMirrored : userAnglesRaw;
+    const userConf = mirrored ? userConfMirrored : userConfRaw;
     // Align on the standardized feature distance so no single wide-range joint
     // dominates the warp path, and so blown-out frames are clamped (see
     // standardizedDistance). Similarity uses the same metric for consistency.
@@ -302,6 +402,7 @@ export function compare(input: CompareInput): AnalysisReport {
     // Build paired feature arrays along the path.
     pairedPro = path.map(([i]) => proAngles[i]);
     pairedUser = path.map(([, j]) => userAngles[j]);
+    pairedW = path.map(([i, j]) => pairWeight(proConf[i], userConf[j]));
   } else {
     // Single-frame mode. Pro has 1 frame and thus no motion to infer its
     // handedness from. Try both orientations of the user sequence and keep
@@ -333,6 +434,8 @@ export function compare(input: CompareInput): AnalysisReport {
     keyUserFrame = chosen.idx;
     pairedPro = [target];
     pairedUser = [userAngles[chosen.idx]];
+    const userConf = mirrored ? userConfMirrored : userConfRaw;
+    pairedW = [pairWeight(proConf[0], userConf[chosen.idx])];
     distance = chosen.dist;
     similarity = [similarityFromDistance(chosen.dist)];
   }
@@ -344,14 +447,16 @@ export function compare(input: CompareInput): AnalysisReport {
   // Per-joint deltas across the paired samples.
   const perJointPro: number[][] = JOINT_FEATURES.map(() => []);
   const perJointUser: number[][] = JOINT_FEATURES.map(() => []);
+  const perJointW: number[][] = JOINT_FEATURES.map(() => []);
   for (let k = 0; k < pairedPro.length; k++) {
     for (let f = 0; f < JOINT_FEATURES.length; f++) {
       perJointPro[f].push(pairedPro[k][f]);
       perJointUser[f].push(pairedUser[k][f]);
+      perJointW[f].push(pairedW[k][f]);
     }
   }
   const jointDeltas = JOINT_FEATURES.map((_, f) =>
-    buildDelta(f, perJointPro[f], perJointUser[f]),
+    buildDelta(f, perJointPro[f], perJointUser[f], perJointW[f]),
   );
 
   // Phase summaries (only meaningful in sequence mode).
@@ -359,15 +464,21 @@ export function compare(input: CompareInput): AnalysisReport {
   if (mode === "sequence") {
     const proPhases = detectPhases(proFrames, phaseKeyJoint, input.pro.fps);
     for (const ph of proPhases) {
-      const subset = path.filter(([i]) => i >= ph.startFrame && i <= ph.endFrame);
-      if (subset.length === 0) continue;
-      const proSub = subset.map(([i]) => proAngles[i]);
-      const userSub = subset.map(([, j]) => userAngles[j]);
+      const subsetIdx: number[] = [];
+      for (let k = 0; k < path.length; k++) {
+        const [i] = path[k];
+        if (i >= ph.startFrame && i <= ph.endFrame) subsetIdx.push(k);
+      }
+      if (subsetIdx.length === 0) continue;
+      const proSub = subsetIdx.map((k) => pairedPro[k]);
+      const userSub = subsetIdx.map((k) => pairedUser[k]);
+      const wSub = subsetIdx.map((k) => pairedW[k]);
       const phaseDeltas = JOINT_FEATURES.map((_, f) =>
         buildDelta(
           f,
           proSub.map((row) => row[f]),
           userSub.map((row) => row[f]),
+          wSub.map((row) => row[f]),
         ),
       );
       phases.push({

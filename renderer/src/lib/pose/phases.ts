@@ -110,15 +110,23 @@ export function detectPhases(
   } else {
     phases.push({ name: "preparation", startFrame: 0, endFrame: releaseStart });
   }
+  // `relEnd` is the last frame of the release window; follow_through must start
+  // strictly after it. When there is no clear velocity peak (flat speed profile),
+  // releaseStart and releaseEnd both collapse to the peak frame, and a raw
+  // `releaseEnd + 1` follow_through start would overlap the forced one-frame
+  // release window. Partitioning on `relEnd` keeps the phases non-overlapping so
+  // no frame is double-counted (and the per-phase frame ranges shown in the UI
+  // never overlap).
+  const relEnd = Math.min(n - 1, Math.max(releaseStart + 1, releaseEnd));
   phases.push({
     name: "release",
     startFrame: releaseStart + 1,
-    endFrame: Math.max(releaseStart + 1, releaseEnd),
+    endFrame: relEnd,
   });
-  if (releaseEnd < n - 1) {
+  if (relEnd < n - 1) {
     phases.push({
       name: "follow_through",
-      startFrame: releaseEnd + 1,
+      startFrame: relEnd + 1,
       endFrame: n - 1,
     });
   }

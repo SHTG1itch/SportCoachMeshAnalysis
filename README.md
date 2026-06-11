@@ -8,8 +8,11 @@ guide plus saveable workout plans that target the specific differences.
 ## What it does, precisely
 
 1. **3D pose extraction** (per frame) — MediaPipe BlazePose GHUM (heavy model),
-   33 world landmarks in meters. Runs locally in the Electron renderer via
-   WebAssembly, with GPU delegate when available.
+   33 world landmarks in meters. Inference runs locally in the Electron renderer
+   via WebAssembly, with GPU delegate when available. The MediaPipe WASM runtime
+   and the pose model are fetched once from public CDNs (jsDelivr and Google
+   storage) on first use and then cached; this is the app's only network access
+   (see "Network use" below).
 2. **Signal cleanup** — before any geometry: (a) missing/occluded landmarks
    (including all-zero frames from detection dropouts) are repaired by
    per-landmark temporal interpolation so they can't inject phantom "fully
@@ -41,9 +44,12 @@ guide plus saveable workout plans that target the specific differences.
 8. **Comparison report** — alignment and scoring run on a per-feature
    *standardized* distance (each joint normalized by a fixed biomechanical scale
    and clamped) so no single wide-range joint dominates the warp path or the
-   score. Per-joint deltas use robust statistics — a trimmed mean for the
-   systematic offset and a 90th-percentile "worst typical" instead of a
-   single-frame max — so a few mis-detected frames can't inflate the numbers.
+   score. Per-joint deltas use robust, **confidence-weighted** statistics — a
+   trimmed mean for the systematic offset and a 90th-percentile "worst typical"
+   instead of a single-frame max, with every paired sample weighted by the
+   minimum landmark visibility feeding that joint's angle — so a few
+   mis-detected frames can't inflate the numbers and a motion-blurred or
+   occluded stretch (a detector guess) can't fabricate or mask a fault.
    Frames where the torso reads as implausibly inverted (a MediaPipe depth-flip
    on fast/blurred contact frames) are detected and repaired by interpolation.
    Joint **significance is keyed on the systematic signed bias**, not the
@@ -66,8 +72,11 @@ guide plus saveable workout plans that target the specific differences.
    the signed bias, sport-aware, and phase-aware), so it never hallucinates
    angles that aren't in the data.
 10. **Persistence** — analyses, generated workouts, and settings are stored in a
-   local SQLite DB under the Electron user-data directory. Nothing ever leaves
-   your machine — the entire pipeline, including the coaching guide, is local.
+   local SQLite DB under the Electron user-data directory. Your media, poses, and
+   results never leave your machine — the analysis and the coaching guide run
+   entirely on-device. The only data the app fetches over the network is the
+   open-source MediaPipe runtime + pose model (once, then cached); your videos
+   are never uploaded anywhere (see "Network use").
 
 ## Stack
 
@@ -109,8 +118,23 @@ no native dependencies and will run under any Node for `npm test`.
 ### No API key, fully free
 
 There is nothing to configure and no key to obtain. The coaching guide and
-workouts are computed on-device by the built-in biomechanics engine, so the app
-is fully functional offline at zero cost. No data ever leaves the machine.
+workouts are computed on-device by the built-in biomechanics engine at zero
+cost, and your videos, poses, and results are never uploaded — no personal data
+ever leaves the machine. The one exception is a first-run download of the
+open-source MediaPipe WASM runtime and pose model from public CDNs; once those
+are cached the analysis runs offline.
+
+### Network use
+
+The app makes **no API calls and uploads nothing** — your videos, extracted
+poses, analyses, and the coaching guide all stay on your machine. The only
+network requests are a one-time fetch of the MediaPipe WASM runtime (jsDelivr)
+and the BlazePose model (Google storage), which the browser engine then caches.
+So the **first** analysis needs a connection; subsequent ones run fully offline.
+Bundling those two assets into the app so it is offline even on first launch —
+loading them from a local `file://` path instead of the CDNs — is a planned
+improvement (it also removes a single point of runtime failure). Until then, the
+offline guarantee holds after the initial model download.
 
 The tradeoff is deliberate: the engine is a deterministic rule system keyed by
 joint, direction (signed bias), and magnitude, not a language model. It gains
@@ -125,10 +149,12 @@ and number-driven rather than free-form.
   - Vector math, joint-angle math (incl. camera-yaw invariance and the
     y-DOWN/up-sign handling of trunk lean), DTW correctness, normalization
     invariance, gap-filling/smoothing, depth-flip frame repair, handedness
-    mirroring, robust + bias-centric per-joint deltas, the compare()
-    orchestration (incl. a lefty-vs-righty end-to-end match), and the native
-    coaching engine (group-deduped, direction-aware, number-grounded,
-    tennis-specific guide + workouts) are all unit-tested (68 passing Vitest
+    mirroring, robust + bias-centric + confidence-weighted per-joint deltas
+    (incl. a regression proving a low-visibility deviant segment cannot
+    fabricate a coaching fault), the compare() orchestration (incl. a
+    lefty-vs-righty end-to-end match), and the native coaching engine
+    (group-deduped, direction-aware, number-grounded, severity-dosed,
+    tennis-specific guide + workouts) are all unit-tested (90 passing Vitest
     tests).
   - Renderer + Electron both typecheck clean; renderer builds clean through
     Vite.
@@ -145,10 +171,12 @@ and number-driven rather than free-form.
   - The Electron result UI on real uploads (pipeline it renders is verified;
     the React screens are typecheck-only).
   - Single-frame "pro as image" mode on real media (unit-tested only).
-  - Contact-instant-only faults are a known limitation: on noisy, low-resolution
-    contact frames the per-phase signal isn't reliable enough to flag without
-    per-frame confidence weighting, so significance keys on the whole-stroke
-    systematic difference.
+  - Contact-instant-only faults remain a known limitation: per-frame confidence
+    weighting now discounts low-visibility contact frames in every per-joint
+    statistic (so they can no longer fabricate a fault), but significance still
+    keys on the whole-stroke systematic difference — a fault that exists *only*
+    at the blurred contact instant is reported descriptively via the per-phase
+    breakdown rather than flagged on its own.
 
 ## Source layout
 

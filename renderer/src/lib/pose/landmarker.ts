@@ -49,6 +49,13 @@ async function getLandmarker(mode: RunningMode): Promise<PoseLandmarker> {
     });
   })();
   landmarkers[mode] = p;
+  // If initialization fails (e.g. a transient network error fetching the WASM
+  // runtime or the heavy model), evict the rejected promise so the next analysis
+  // re-attempts instead of being permanently stuck with the cached rejection
+  // until the app is restarted. The caller still observes this rejection.
+  p.catch(() => {
+    if (landmarkers[mode] === p) delete landmarkers[mode];
+  });
   return p;
 }
 

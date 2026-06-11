@@ -420,9 +420,16 @@ function buildGuide(req: GuideRequest): ImprovementGuide {
   });
 
   // Strengths: well-matched joints (smallest deltas), plus an overall note.
+  // Exclude any body-part group already surfaced as a key issue, so the same
+  // joint can't read as both a fault and a strength. The two sides of one joint
+  // routinely land in different significance buckets (asymmetric mechanics), so
+  // without this a flagged right knee and a well-matched left knee would both
+  // mention "knee" — contradicting the grouped-issue design (see comment above).
+  const issueGroups = new Set(ranked.map((d) => jointKey(d.joint)));
   const matched = dedupeByGroup(
     [...deltas].filter((d) => d.significance === "low").sort((a, b) => gapDeg(a) - gapDeg(b)),
   )
+    .filter((d) => !issueGroups.has(jointKey(d.joint)))
     .slice(0, 3)
     .map((d) => `Your ${KB[jointKey(d.joint)].group} closely matches the pro (within ${Math.round(gapDeg(d))}°).`);
   const strengths =
@@ -467,6 +474,23 @@ function buildWorkouts(req: GuideRequest): Workout[] {
     r: resolveKnowledge(sport.id, d.joint, d.signedBiasDeg >= 0 ? "more" : "less"),
   }));
   const targetsJoints = Array.from(new Set(targets.map((d) => d.joint)));
+  // Ground the workout in the measurements: name each target with its measured
+  // systematic gap so the athlete knows exactly why the exercise is in the plan.
+  const targetSummary = targetKnowledge
+    .map((t) => `${t.r.group} (${Math.round(gapDeg(t.d))}°)`)
+    .join(", ");
+  // Dose scales with the measured fault: a high-significance gap (≥15°) earns an
+  // extra strengthening set, so a 25° hip-load deficit is trained harder than a
+  // borderline 8° one. Clones the KB step — the KB itself stays canonical.
+  const strengthenFor = (t: { d: JointDelta; k: JointKnowledge }): WorkoutStep => {
+    const base = t.k.strengthen;
+    if (t.d.significance !== "high" || base.sets === undefined) return base;
+    return {
+      ...base,
+      sets: base.sets + 1,
+      description: `${base.description} Extra set: this is your largest measured gap (${Math.round(gapDeg(t.d))}°).`,
+    };
+  };
   const dur = (steps: WorkoutStep[]): number =>
     Math.max(
       10,
@@ -480,7 +504,7 @@ function buildWorkouts(req: GuideRequest): Workout[] {
 
   // 1. Mobility & activation.
   const w1Warm = targetKnowledge.map((t) => t.k.mobilize).slice(0, 3);
-  const w1Main = targetKnowledge.map((t) => t.k.strengthen).slice(0, 1);
+  const w1Main = targetKnowledge.map((t) => strengthenFor(t)).slice(0, 1);
   const w1Cool = targetKnowledge.map((t) => t.k.stretch).slice(0, 2);
   const workout1: Workout = {
     id: slug([sport.id, shot, "mobility"]),
@@ -500,12 +524,19 @@ function buildWorkouts(req: GuideRequest): Workout[] {
   const w2Warm: WorkoutStep[] = [
     { name: "Dynamic full-body warm-up", durationSec: 300, description: "Light cardio plus the mobility drills above.", cues: ["raise heart rate", "move through range"] },
   ];
-  const w2Main = targetKnowledge.map((t) => t.k.strengthen);
+  const w2Main = targetKnowledge.map((t) => strengthenFor(t));
   const w2Cool = targetKnowledge.map((t) => t.k.stretch).slice(0, 2);
+  // Progression guidance matched to how far off the mechanics actually are —
+  // the same signal that set the difficulty.
+  const progression: Record<Workout["difficulty"], string> = {
+    beginner: "Start light and own every position before adding load.",
+    intermediate: "Add load gradually once every rep is crisp.",
+    advanced: "Push the main lifts, but end a set the moment form degrades.",
+  };
   const workout2: Workout = {
     id: slug([sport.id, shot, "strength"]),
     title: "Corrective strength",
-    focus: `Build strength where your mechanics differ most from the pro.`,
+    focus: `Build strength where your mechanics differ most from the pro: ${targetSummary}.`,
     durationMin: dur([...w2Warm, ...w2Main, ...w2Cool]),
     difficulty,
     equipment: ["dumbbells", "cable or band", "bench"],
@@ -513,7 +544,7 @@ function buildWorkouts(req: GuideRequest): Workout[] {
     main: w2Main,
     cooldown: w2Cool,
     targetsJoints,
-    notes: "2–3× per week with a day of recovery between sessions.",
+    notes: `2–3× per week with a day of recovery between sessions. ${progression[difficulty]}`,
   };
 
   // 3. Skill & sequencing — turns the corrections into the actual motion.
@@ -528,7 +559,7 @@ function buildWorkouts(req: GuideRequest): Workout[] {
     name: t.r.drill,
     sets: 4,
     reps: "6-8",
-    description: `Rehearse the correction for your ${t.r.group} with intent.`,
+    description: `Rehearse the correction for your ${t.r.group} — you're closing a measured ~${Math.round(gapDeg(t.d))}° gap to the pro.`,
     cues: [t.r.cue],
   }));
   const workout3: Workout = {

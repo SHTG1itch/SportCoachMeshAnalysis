@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { compare, repairImplausibleFrames } from "./compare";
+import {
+  compare,
+  repairImplausibleFrames,
+  weightedPercentile,
+  weightedTrimmedMean,
+} from "./compare";
 import { JOINT_FEATURES } from "./angles";
 import { L, type PoseFrame } from "./types";
 import type { SportMeta } from "@shared/types";
@@ -186,6 +191,33 @@ describe("compare", () => {
     expect(elbow!.meanDeltaDeg).toBeLessThan(2);
   });
 
+  it("aligns same-motion clips of DIFFERENT lengths (DTW band regression)", () => {
+    // The same forehand arc captured at two different frame counts (different
+    // fps/duration). |30 - 45| = 15 exceeds the old ratio-only band
+    // (floor(45 * 0.25) = 11), which made the DTW endpoint unreachable: the
+    // report came back with an Infinity alignment distance and a similarity score
+    // collapsed toward 0 for two essentially-identical motions. With the band
+    // floored at |n - m| the alignment is recovered.
+    const arc = (phase: number): PoseFrame => {
+      const f = defaultFrame();
+      f[L.RIGHT_WRIST] = { x: 0.1 + phase * 0.5, y: 1.0 + phase * 0.4, z: 0, visibility: 1 };
+      f[L.RIGHT_ELBOW] = { x: 0.25, y: 1.1 + phase * 0.05, z: 0, visibility: 1 };
+      return f;
+    };
+    const pro = Array.from({ length: 30 }, (_, i) => arc(i / 29));
+    const user = Array.from({ length: 45 }, (_, i) => arc(i / 44));
+    const report = compare({
+      sport: SPORT,
+      shot: "Forehand",
+      pro: { frames: pro, fps: 30, kind: "video" },
+      user: { frames: user, fps: 30 },
+    });
+    expect(report.mode).toBe("sequence");
+    expect(report.alignment).not.toBeNull();
+    expect(Number.isFinite(report.alignment!.distance)).toBe(true);
+    expect(report.overallSimilarity).toBeGreaterThan(0.9);
+  });
+
   it("repairImplausibleFrames interpolates depth-flipped (inverted-torso) frames", () => {
     const F = JOINT_FEATURES.length;
     const TL = JOINT_FEATURES.findIndex((j) => j.name === "trunk_lean");
@@ -252,5 +284,89 @@ describe("compare", () => {
     expect(elbow).toBeDefined();
     expect(elbow!.meanDeltaDeg).toBeGreaterThan(30);
     expect(["medium", "high"]).toContain(elbow!.significance);
+  });
+});
+
+describe("confidence-weighted statistics", () => {
+  it("weightedTrimmedMean with uniform weights matches the data's central mass", () => {
+    const xs = [0, 0, 0, 0, 0, 0, 0, 0, 100, 100];
+    const uniform = new Array(xs.length).fill(1);
+    // 10% trim removes one sample's worth of weight from each end: one of the
+    // two 100s is fully trimmed, leaving 100 * 1 / 8 = 12.5.
+    expect(weightedTrimmedMean(xs, uniform, 0.1)).toBeCloseTo(12.5, 6);
+  });
+
+  it("weightedTrimmedMean discounts low-confidence samples", () => {
+    // 12 trusted zeros, 4 detector guesses at 60° with low confidence.
+    const xs = [...new Array(12).fill(0), ...new Array(4).fill(60)];
+    const ws = [...new Array(12).fill(0.95), ...new Array(4).fill(0.1)];
+    const weighted = weightedTrimmedMean(xs, ws, 0.1);
+    const unweighted = weightedTrimmedMean(xs, new Array(16).fill(1), 0.1);
+    expect(weighted).toBeLessThan(2); // guesses barely register
+    expect(unweighted).toBeGreaterThan(10); // equal-vote version is dragged up
+  });
+
+  it("weightedTrimmedMean falls back to the unweighted path on zero total weight", () => {
+    const xs = [1, 2, 3, 4, 5, 6, 7, 8];
+    const zeros = new Array(xs.length).fill(0);
+    expect(weightedTrimmedMean(xs, zeros, 0.1)).toBeCloseTo(4.5, 6);
+  });
+
+  it("weightedPercentile reproduces nearest-rank under uniform weights", () => {
+    const xs = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+    const uniform = new Array(xs.length).fill(1);
+    expect(weightedPercentile(xs, uniform, 0.9)).toBe(90);
+    expect(weightedPercentile(xs, uniform, 0.5)).toBe(50);
+  });
+
+  it("weightedPercentile shifts down when the tail has low confidence", () => {
+    const xs = [10, 10, 10, 10, 10, 10, 10, 10, 90, 95];
+    const ws = [1, 1, 1, 1, 1, 1, 1, 1, 0.05, 0.05];
+    // The 90th weighted percentile sits inside the trusted mass, not the
+    // low-confidence spike tail.
+    expect(weightedPercentile(xs, ws, 0.9)).toBe(10);
+  });
+});
+
+describe("confidence weighting in compare()", () => {
+  // A right-elbow geometry where the wrist position controls the flexion angle.
+  const elbowFrame = (wrist: [number, number, number], wristVis: number): PoseFrame => {
+    const f = defaultFrame();
+    f[L.RIGHT_SHOULDER] = { x: 0, y: 1, z: 0, visibility: 1 };
+    f[L.RIGHT_ELBOW] = { x: 1, y: 1, z: 0, visibility: 1 };
+    f[L.RIGHT_WRIST] = { x: wrist[0], y: wrist[1], z: wrist[2], visibility: wristVis };
+    return f;
+  };
+  const NINETY: [number, number, number] = [1, 2, 0]; // 90° flexion
+  const THIRTY: [number, number, number] = [1 + Math.cos(Math.PI / 3), 1 + Math.sin(Math.PI / 3), 0]; // 30° flexion
+
+  const run = (badVis: number) => {
+    // Pro: rock-steady 90° elbow, fully visible.
+    const pro = Array.from({ length: 20 }, () => elbowFrame(NINETY, 1));
+    // User: matches the pro for 14 frames; the final 6 frames read ~60° off.
+    // With badVis < 1 those frames are exactly MediaPipe's failure mode on fast
+    // contact: a confident-looking position with LOW visibility. (Kept above the
+    // 0.3 gap-fill threshold so the frames are not interpolated away.)
+    const user = Array.from({ length: 20 }, (_, i) =>
+      i < 14 ? elbowFrame(NINETY, 0.95) : elbowFrame(THIRTY, badVis),
+    );
+    return compare({
+      sport: SPORT,
+      shot: "Forehand",
+      pro: { frames: pro, fps: 30, kind: "video" },
+      user: { frames: user, fps: 30 },
+    }).jointDeltas.find((d) => d.joint === "right_elbow")!;
+  };
+
+  it("a low-visibility deviant segment cannot fabricate a coaching fault", () => {
+    const elbow = run(0.32);
+    expect(Math.abs(elbow.signedBiasDeg)).toBeLessThan(7);
+    expect(elbow.significance).toBe("low");
+  });
+
+  it("control: the SAME deviation at full visibility IS flagged", () => {
+    const elbow = run(0.95);
+    expect(Math.abs(elbow.signedBiasDeg)).toBeGreaterThanOrEqual(7);
+    expect(elbow.significance).not.toBe("low");
   });
 });

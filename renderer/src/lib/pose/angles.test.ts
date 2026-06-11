@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { computeAngles, computeAnglesSequence, detectUpSign, JOINT_FEATURES } from "./angles";
+import {
+  computeAngles,
+  computeAnglesSequence,
+  detectUpSign,
+  featureConfidence,
+  FEATURE_LANDMARKS,
+  JOINT_FEATURES,
+} from "./angles";
 import { L, type PoseFrame } from "./types";
 
 function mkFrame(overrides: Partial<Record<number, [number, number, number]>>): PoseFrame {
@@ -172,5 +179,48 @@ describe("computeAngles", () => {
     const out = computeAngles(f);
     const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_rotation");
     expect(out[idx]).toBeCloseTo(90, 3);
+  });
+});
+
+describe("featureConfidence", () => {
+  it("returns one confidence per feature, 1.0 when everything is visible", () => {
+    const f = mkFrame({});
+    const c = featureConfidence(f);
+    expect(c).toHaveLength(JOINT_FEATURES.length);
+    expect(FEATURE_LANDMARKS).toHaveLength(JOINT_FEATURES.length);
+    for (const v of c) expect(v).toBe(1);
+  });
+
+  it("a feature's confidence is the MIN visibility of its input landmarks", () => {
+    const f = mkFrame({});
+    f[L.RIGHT_WRIST].visibility = 0.2; // feeds right_elbow only
+    f[L.RIGHT_ELBOW].visibility = 0.6; // feeds right_elbow + right_shoulder
+    const c = featureConfidence(f);
+    const idx = (n: string) => JOINT_FEATURES.findIndex((j) => j.name === n);
+    expect(c[idx("right_elbow")]).toBeCloseTo(0.2, 6); // min(shoulder=1, elbow=0.6, wrist=0.2)
+    expect(c[idx("right_shoulder")]).toBeCloseTo(0.6, 6); // min(shoulder=1, hip=1, elbow=0.6)
+    expect(c[idx("left_elbow")]).toBe(1); // other side untouched
+  });
+
+  it("trunk features are gated by ALL FOUR core landmarks (matching the angle zeroing)", () => {
+    // computeAngles zeroes trunk_rotation/lean/shoulder_line_tilt when ANY core
+    // landmark is below its visibility gate, so a bad hip must lower the
+    // confidence of shoulder_line_tilt too even though its geometry only uses
+    // the shoulders — otherwise the gated 0 reads as a trustworthy angle.
+    const f = mkFrame({});
+    f[L.LEFT_HIP].visibility = 0.1;
+    const c = featureConfidence(f);
+    const idx = (n: string) => JOINT_FEATURES.findIndex((j) => j.name === n);
+    expect(c[idx("trunk_rotation")]).toBeCloseTo(0.1, 6);
+    expect(c[idx("trunk_lean")]).toBeCloseTo(0.1, 6);
+    expect(c[idx("shoulder_line_tilt")]).toBeCloseTo(0.1, 6);
+  });
+
+  it("clamps out-of-range visibility into 0..1", () => {
+    const f = mkFrame({});
+    f[L.RIGHT_WRIST].visibility = -0.5;
+    const c = featureConfidence(f);
+    const idx = JOINT_FEATURES.findIndex((j) => j.name === "right_elbow");
+    expect(c[idx]).toBe(0);
   });
 });

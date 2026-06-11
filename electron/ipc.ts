@@ -1,4 +1,4 @@
-import { ipcMain, shell } from "electron";
+import { ipcMain } from "electron";
 import {
   deleteAnalysis,
   deleteWorkout,
@@ -10,6 +10,7 @@ import {
   saveWorkout,
   setSettings,
 } from "./db";
+import { openExternalSafely } from "./safeOpen";
 import type {
   AnalysisRecord,
   AppSettings,
@@ -30,6 +31,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle("settings:set", (_e, s: Partial<AppSettings>) => setSettings(s));
 
   ipcMain.handle("shell:open", async (_e, url: string) => {
-    await shell.openExternal(url);
+    await openExternalSafely(url);
   });
 }

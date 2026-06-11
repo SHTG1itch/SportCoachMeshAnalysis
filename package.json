@@ -49,6 +49,9 @@
     "productName": "Sport Coach Mesh",
     "files": [
       "dist/**",
+      "!dist/testclips/**",
+      "!dist/sample_seq.json",
+      "!dist/sample_single.json",
       "dist-electron/**",
       "node_modules/**"
     ],

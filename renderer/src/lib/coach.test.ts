@@ -159,6 +159,28 @@ describe("native coach engine", () => {
     expect(kneeIssues[0].joint).toBe("left_knee"); // the worse (|bias| 22 > 18) side
   });
 
+  it("never lists a body-part group as both a key issue and a strength", () => {
+    // One side of the knee is a clear fault; the other side is well-matched.
+    // The well-matched side must NOT surface as a "knee closely matches" strength
+    // while the knee is also flagged as an issue — that would be contradictory.
+    const { guide } = generateGuideAndWorkouts(
+      req({
+        jointDeltas: [
+          delta("right_knee", 18, 18, "high"), // flagged
+          delta("left_knee", 3, -3, "low"), // well-matched
+          delta("trunk_lean", 1, 1, "low"), // a genuine, non-conflicting strength
+        ],
+      }),
+    );
+    const issueGroups = guide.keyIssues
+      .map((i) => i.joint)
+      .filter((j): j is JointName => !!j)
+      .map((j) => (j.endsWith("knee") ? "knee" : j));
+    expect(issueGroups).toContain("knee");
+    // No strength may mention "knee" while the knee is a flagged issue.
+    expect(guide.strengths.some((s) => s.toLowerCase().includes("knee"))).toBe(false);
+  });
+
   it("reports the gap as the systematic offset (|bias|), consistent with the means", () => {
     const { guide } = generateGuideAndWorkouts(
       req({ jointDeltas: [delta("right_hip", 30, -24, "high")] }),
@@ -189,6 +211,49 @@ describe("native coach engine", () => {
     expect(tennisHip).toContain("unit turn"); // tennis-specific language
     expect(golfHip).not.toContain("unit turn"); // generic fallback
     expect(tennisHip).not.toBe(golfHip);
+  });
+
+  it("scales strengthening volume with measured severity (extra set for high-significance gaps)", () => {
+    const { workouts } = generateGuideAndWorkouts(
+      req({
+        jointDeltas: [
+          delta("right_hip", 24, -24, "high"),
+          delta("trunk_rotation", 9, -9, "medium"),
+        ],
+      }),
+    );
+    const strength = workouts.find((w) => w.title === "Corrective strength")!;
+    const hipStep = strength.main.find((s) => s.name === "Romanian deadlift")!;
+    const trunkStep = strength.main.find((s) => s.name === "Cable rotational chop")!;
+    expect(hipStep.sets).toBe(4); // high gap → +1 set over the KB's 3
+    expect(hipStep.description).toContain("24°");
+    expect(trunkStep.sets).toBe(3); // medium gap → standard dose
+  });
+
+  it("grounds the strength workout's focus and skill drills in the measured gaps", () => {
+    const { workouts } = generateGuideAndWorkouts(
+      req({ jointDeltas: [delta("right_hip", 24, -24, "high")] }),
+    );
+    const strength = workouts.find((w) => w.title === "Corrective strength")!;
+    expect(strength.focus).toContain("hip (24°)");
+    const skill = workouts.find((w) => w.title === "Skill & sequencing")!;
+    expect(skill.main[0].description).toContain("24°");
+  });
+
+  it("appends progression guidance matched to the difficulty", () => {
+    const easy = generateGuideAndWorkouts(
+      req({ jointDeltas: [delta("right_elbow", 8, 8, "medium")] }),
+    ).workouts.find((w) => w.title === "Corrective strength")!;
+    const hard = generateGuideAndWorkouts(
+      req({
+        jointDeltas: [
+          delta("right_elbow", 20, 20, "high"),
+          delta("trunk_rotation", 18, -18, "high"),
+        ],
+      }),
+    ).workouts.find((w) => w.title === "Corrective strength")!;
+    expect(easy.notes).toContain("Start light");
+    expect(hard.notes).toContain("form degrades");
   });
 
   it("is deterministic — identical input yields identical output", () => {

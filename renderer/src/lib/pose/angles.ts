@@ -25,6 +25,62 @@ function asVec(p: { x: number; y: number; z: number }): Vec3 {
 }
 
 /**
+ * The landmarks whose positions feed each feature, in JOINT_FEATURES order.
+ * Used to derive a per-frame, per-feature confidence from landmark visibility:
+ * an angle is only as trustworthy as its least-visible input landmark.
+ *
+ * The three trunk features list all four core landmarks (not just the ones in
+ * their geometry) because computeAngles zeroes ALL of them when any core
+ * landmark is below its visibility gate — so a frame with, say, occluded hips
+ * must read as low-confidence for shoulder_line_tilt too, or its gated 0° would
+ * pass downstream as a trustworthy measurement.
+ */
+export const FEATURE_LANDMARKS: number[][] = [
+  [L.LEFT_SHOULDER, L.LEFT_ELBOW, L.LEFT_WRIST], // left_elbow
+  [L.RIGHT_SHOULDER, L.RIGHT_ELBOW, L.RIGHT_WRIST], // right_elbow
+  [L.LEFT_SHOULDER, L.LEFT_HIP, L.LEFT_ELBOW], // left_shoulder
+  [L.RIGHT_SHOULDER, L.RIGHT_HIP, L.RIGHT_ELBOW], // right_shoulder
+  [L.LEFT_SHOULDER, L.LEFT_HIP, L.LEFT_KNEE], // left_hip
+  [L.RIGHT_SHOULDER, L.RIGHT_HIP, L.RIGHT_KNEE], // right_hip
+  [L.LEFT_HIP, L.LEFT_KNEE, L.LEFT_ANKLE], // left_knee
+  [L.RIGHT_HIP, L.RIGHT_KNEE, L.RIGHT_ANKLE], // right_knee
+  [L.LEFT_KNEE, L.LEFT_ANKLE, L.LEFT_FOOT_INDEX], // left_ankle
+  [L.RIGHT_KNEE, L.RIGHT_ANKLE, L.RIGHT_FOOT_INDEX], // right_ankle
+  [L.LEFT_SHOULDER, L.RIGHT_SHOULDER, L.LEFT_HIP, L.RIGHT_HIP], // trunk_rotation
+  [L.LEFT_SHOULDER, L.RIGHT_SHOULDER, L.LEFT_HIP, L.RIGHT_HIP], // trunk_lean
+  [L.LEFT_SHOULDER, L.RIGHT_SHOULDER, L.LEFT_HIP, L.RIGHT_HIP], // shoulder_line_tilt
+];
+
+/**
+ * Per-feature confidence (0..1) for one frame: the minimum visibility of the
+ * landmarks that feature's angle is computed from. MediaPipe reports a
+ * visibility/presence score per landmark; when a wrist is motion-blurred or
+ * occluded behind the body the detector still emits a position — a guess — with
+ * low visibility. Min (not mean) because a single unreliable endpoint corrupts
+ * the whole angle regardless of how visible the other landmarks are.
+ */
+export function featureConfidence(frame: PoseFrame): number[] {
+  return FEATURE_LANDMARKS.map((lms) => {
+    let c = 1;
+    for (const i of lms) {
+      const v = frame[i]?.visibility ?? 0;
+      if (v < c) c = v;
+    }
+    return c < 0 ? 0 : c > 1 ? 1 : c;
+  });
+}
+
+/**
+ * Per-frame, per-feature confidence for a whole clip. Callers should pass the
+ * RAW extracted frames (before gap-filling), so frames whose landmarks were
+ * interpolated — synthetic positions — keep their honest low visibility instead
+ * of inheriting the interpolated one.
+ */
+export function featureConfidenceSequence(frames: PoseFrame[]): number[][] {
+  return frames.map(featureConfidence);
+}
+
+/**
  * Compute one feature vector of joint angles (degrees) for a single pose frame.
  * Order matches JOINT_FEATURES. Returns 0 for landmarks with low visibility
  * so downstream code can treat missing data as "no signal".

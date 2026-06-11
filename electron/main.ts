@@ -1,7 +1,8 @@
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow } from "electron";
 import * as path from "path";
 import { registerIpcHandlers } from "./ipc";
 import { initDb } from "./db";
+import { openExternalSafely } from "./safeOpen";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -26,9 +27,25 @@ function createWindow(): void {
 
   mainWindow.once("ready-to-show", () => mainWindow?.show());
 
+  // Never open a child window in-app; hand web links to the OS browser (scheme-
+  // allowlisted) and deny everything else.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    void openExternalSafely(url);
     return { action: "deny" };
+  });
+
+  // Pin the top frame to the app's own content. The first-party renderer never
+  // navigates itself today, but this is standard Electron hardening: it stops any
+  // future stray navigation from replacing the app (with the preload IPC bridge
+  // attached) with off-origin content, and routes such attempts to the browser.
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const allowed = isDev
+      ? url.startsWith("http://localhost:5173")
+      : url.startsWith("file://");
+    if (!allowed) {
+      event.preventDefault();
+      void openExternalSafely(url);
+    }
   });
 
   if (isDev) {

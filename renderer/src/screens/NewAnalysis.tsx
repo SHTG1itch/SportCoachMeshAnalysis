@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { ArrowRight, Play } from "lucide-react";
 import { SPORTS } from "../lib/sports";
@@ -19,6 +19,19 @@ export function NewAnalysis() {
   const [progress, setProgress] = useState<AnalyzeProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // The analysis runs detached from the React tree (it drives off-DOM <video>
+  // elements), so it keeps going if the user navigates away mid-run. Track
+  // liveness so a completed run that the user abandoned does not yank them off
+  // whatever screen they moved to and back into the result view. The analysis is
+  // still saved, so it shows up in History either way.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const canRun = !!proFile && !!userFile && !running;
 
   const start = async () => {
@@ -35,12 +48,13 @@ export function NewAnalysis() {
       const record = buildRecord(report, undefined);
       await window.app.saveAnalysis(record);
       await refresh();
+      if (!mountedRef.current) return; // user left this screen — don't force-navigate
       go({ name: "analysis", record });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      if (mountedRef.current) setError(msg);
     } finally {
-      setRunning(false);
+      if (mountedRef.current) setRunning(false);
     }
   };
 
