@@ -13,7 +13,7 @@ import {
   featureConfidenceSequence,
 } from "./angles";
 import { normalizeAll } from "./normalize";
-import { fillGaps, smoothFrames, detectionCoverage } from "./prepare";
+import { fillGaps, despikeFrames, smoothFrames, detectionCoverage } from "./prepare";
 import { L } from "./types";
 import {
   detectDominantSide,
@@ -330,7 +330,10 @@ export function compare(input: CompareInput): AnalysisReport {
   //   1. fillGaps  — repair missing/occluded landmarks (e.g. all-zero frames
   //      from detection dropouts) so they don't inject spurious "fully
   //      extended" joint angles into the comparison.
-  //   2. smoothFrames — remove single-frame detector jitter so angle deltas
+  //   2. despikeFrames — repair physically impossible high-confidence landmark
+  //      jumps (detector glitches that visibility weighting cannot see) BEFORE
+  //      smoothing smears them across neighbouring frames.
+  //   3. smoothFrames — remove single-frame detector jitter so angle deltas
   //      reflect real movement. A 1-frame video / single image is a no-op.
   // Detection coverage is measured on the RAW frames (before gap-filling) so it
   // reflects how much real signal there was vs. how much was interpolated.
@@ -339,8 +342,8 @@ export function compare(input: CompareInput): AnalysisReport {
     pro: +detectionCoverage(input.pro.frames, CORE).toFixed(3),
     user: +detectionCoverage(input.user.frames, CORE).toFixed(3),
   };
-  const proFrames = normalizeAll(smoothFrames(fillGaps(input.pro.frames)));
-  const userFrames = normalizeAll(smoothFrames(fillGaps(input.user.frames)));
+  const proFrames = normalizeAll(smoothFrames(despikeFrames(fillGaps(input.pro.frames))));
+  const userFrames = normalizeAll(smoothFrames(despikeFrames(fillGaps(input.user.frames))));
   const proAngles = repairImplausibleFrames(computeAnglesSequence(proFrames));
   const userAnglesRaw = repairImplausibleFrames(computeAnglesSequence(userFrames));
   // Per-frame, per-feature detection confidence, from the RAW frames so

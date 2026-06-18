@@ -1,0 +1,3 @@
+STATUS: PRO novak_fh frame 101/150
+VIDEO-mode TTA probe: dual landmarker instances, shared clock, two clips, no reset
+loaded pro=150 user=120 JPGs

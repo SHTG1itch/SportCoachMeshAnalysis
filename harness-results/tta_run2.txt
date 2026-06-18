@@ -1,0 +1,2 @@
+STATUS: pro frame 90
+Harness config: pro=/testclips/novak2_fh user=/testclips/novak_a sport=tennis shot=Forehand proKind=video maxFrames=240 selftest=false

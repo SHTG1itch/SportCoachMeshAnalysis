@@ -86,6 +86,127 @@ function copyLm(lm: Landmark3D): Landmark3D {
 }
 
 /**
+ * A spike must deviate from the local median by at least this many meters
+ * (world coordinates). At 30 fps, 0.12 m off a straight-line path implies an
+ * acceleration of ~20 g on a body landmark — beyond anything a human limb does,
+ * even at a tennis contact. Below it, real explosive motion could be clipped.
+ */
+const SPIKE_FLOOR_M = 0.12;
+/**
+ * ...and exceed the local spread (how much the neighbours themselves move) by
+ * this ratio, so fast-but-smooth motion — where consecutive frames legitimately
+ * sit far apart — raises the bar instead of being flagged.
+ */
+const SPIKE_SPREAD_RATIO = 2.5;
+/** Temporal half-window for the local median (5 frames total): wide enough to
+ * out-vote glitch runs up to 2 frames, narrow enough to track real motion. */
+const SPIKE_RADIUS = 2;
+
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const n = s.length;
+  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+}
+
+/**
+ * Remove physically impossible single-frame (and up to two-frame) landmark
+ * jumps — "spike-and-return" glitches — by interpolating across them.
+ *
+ * Why this exists: MediaPipe sometimes emits a confidently wrong pose for a
+ * frame (depth flips, left/right swaps, a shoulder teleporting a metre and
+ * back between consecutive 30 fps frames) **with visibility ≈ 1.0**. Measured
+ * on real court footage, these glitches survive every existing defence:
+ * visibility weighting can't see them (the detector is confident), gap-filling
+ * doesn't trigger (nothing is "missing"), and the binomial smoother only
+ * smears them across neighbouring frames — corrupting joint angles by 30–60°
+ * on frames the comparison then trusts fully.
+ *
+ * Detector (per landmark, per frame): compare the point against the
+ * component-wise median of its temporal neighbours (±SPIKE_RADIUS frames,
+ * excluding the frame itself). It is a spike only if the deviation is BOTH
+ *   - physically implausible in absolute terms (> SPIKE_FLOOR_M), and
+ *   - far beyond how much the neighbours themselves spread around that median
+ *     (> SPIKE_SPREAD_RATIO × median neighbour deviation),
+ * so genuinely fast, smooth motion — where neighbours are themselves far
+ * apart — raises the threshold rather than tripping it.
+ *
+ * Repair: flagged samples are linearly interpolated from the nearest
+ * non-flagged frames on each side (clip ends hold the nearest good frame),
+ * exactly like fillGaps repairs missing landmarks. Visibility is left
+ * untouched: the original confidence stays honest for downstream weighting.
+ * Frame count is preserved. Clips shorter than 2×SPIKE_RADIUS+1 frames are
+ * returned as-is (no reliable local median exists).
+ */
+export function despikeFrames(frames: PoseFrame[]): PoseFrame[] {
+  const n = frames.length;
+  const out = frames.map((f) => f.map(copyLm));
+  if (n < 2 * SPIKE_RADIUS + 1) return out;
+  const numLm = frames[0].length;
+
+  for (let j = 0; j < numLm; j++) {
+    // --- detect ---
+    const bad: boolean[] = new Array(n).fill(false);
+    for (let i = 0; i < n; i++) {
+      // Nearest 2×SPIKE_RADIUS frames, excluding i itself. At the clip edges
+      // the window extends one-sided so frame 0 / frame n-1 glitches are still
+      // judged against a full set of neighbours.
+      const xs: number[] = [];
+      const ys: number[] = [];
+      const zs: number[] = [];
+      for (let d = 1; xs.length < 2 * SPIKE_RADIUS && d < n; d++) {
+        for (const idx of [i - d, i + d]) {
+          if (idx < 0 || idx >= n || xs.length >= 2 * SPIKE_RADIUS) continue;
+          const lm = frames[idx][j];
+          xs.push(lm.x);
+          ys.push(lm.y);
+          zs.push(lm.z);
+        }
+      }
+      if (xs.length < 3) continue; // clip too short to judge
+      const mx = median(xs);
+      const my = median(ys);
+      const mz = median(zs);
+      const p = frames[i][j];
+      const dev = Math.hypot(p.x - mx, p.y - my, p.z - mz);
+      if (dev <= SPIKE_FLOOR_M) continue;
+      const spreads = xs.map((_, t) =>
+        Math.hypot(xs[t] - mx, ys[t] - my, zs[t] - mz),
+      );
+      if (dev > SPIKE_SPREAD_RATIO * median(spreads)) bad[i] = true;
+    }
+
+    // --- repair: interpolate across flagged runs from good anchors ---
+    const anchors: number[] = [];
+    for (let i = 0; i < n; i++) if (!bad[i]) anchors.push(i);
+    if (anchors.length === 0 || anchors.length === n) continue;
+    const first = anchors[0];
+    const last = anchors[anchors.length - 1];
+    for (let i = 0; i < first; i++) {
+      const a = frames[first][j];
+      out[i][j].x = a.x; out[i][j].y = a.y; out[i][j].z = a.z;
+    }
+    for (let i = last + 1; i < n; i++) {
+      const a = frames[last][j];
+      out[i][j].x = a.x; out[i][j].y = a.y; out[i][j].z = a.z;
+    }
+    for (let a = 0; a < anchors.length - 1; a++) {
+      const lo = anchors[a];
+      const hi = anchors[a + 1];
+      if (hi - lo <= 1) continue;
+      const A = frames[lo][j];
+      const B = frames[hi][j];
+      for (let i = lo + 1; i < hi; i++) {
+        const t = (i - lo) / (hi - lo);
+        out[i][j].x = A.x + (B.x - A.x) * t;
+        out[i][j].y = A.y + (B.y - A.y) * t;
+        out[i][j].z = A.z + (B.z - A.z) * t;
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Binomial coefficients for a window of half-width `radius` (size 2r+1),
  * normalized to sum to 1. Binomial weights approximate a Gaussian low-pass:
  * they attenuate frame-to-frame jitter while preserving the location of a

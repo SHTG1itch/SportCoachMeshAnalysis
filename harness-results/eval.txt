@@ -36,25 +36,25 @@
 ========== SELF: novak vs novak (expect ~1.0) ==========
 mode=sequence similarity=1.00 handedness={"pro":"left","user":"left","mirrored":false} dtw=0.00 cov={"pro":0.927,"user":0.927}
   joint                   mean     max     pro    user    bias  sig
-  left_elbow              0.00    0.00   60.21   60.21    0.00  low
-  right_elbow             0.00    0.00   53.22   53.22    0.00  low
-  left_shoulder           0.00    0.00  133.50  133.50    0.00  low
-  right_shoulder          0.00    0.00  149.72  149.72    0.00  low
-  left_hip                0.00    0.00   23.95   23.95    0.00  low
-  right_hip               0.00    0.00   43.83   43.83    0.00  low
-  left_knee               0.00    0.00   18.60   18.60    0.00  low
-  right_knee              0.00    0.00   34.59   34.59    0.00  low
-  left_ankle              0.00    0.00  120.60  120.60    0.00  low
-  right_ankle             0.00    0.00  111.93  111.93    0.00  low
-  trunk_rotation          0.00    0.00   25.29   25.29    0.00  low
-  trunk_lean              0.00    0.00   13.99   13.99    0.00  low
-  shoulder_line_tilt      0.00    0.00   13.07   13.07    0.00  low
+  left_elbow              0.00    0.00   60.12   60.12    0.00  low
+  right_elbow             0.00    0.00   50.30   50.30    0.00  low
+  left_shoulder           0.00    0.00  135.97  135.97    0.00  low
+  right_shoulder          0.00    0.00  149.10  149.10    0.00  low
+  left_hip                0.00    0.00   24.04   24.04    0.00  low
+  right_hip               0.00    0.00   43.88   43.88    0.00  low
+  left_knee               0.00    0.00   19.04   19.04    0.00  low
+  right_knee              0.00    0.00   34.25   34.25    0.00  low
+  left_ankle              0.00    0.00  119.68  119.68    0.00  low
+  right_ankle             0.00    0.00  112.53  112.53    0.00  low
+  trunk_rotation          0.00    0.00   25.64   25.64    0.00  low
+  trunk_lean              0.00    0.00   13.59   13.59    0.00  low
+  shoulder_line_tilt      0.00    0.00   13.66   13.66    0.00  low
   → 0 high, 0 medium
   phases:
-    preparation    [0-23] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
-    load           [24-39] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
-    release        [40-48] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
-    follow_through [49-149] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    preparation    [0-48] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    load           [49-80] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    release        [81-89] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    follow_through [90-149] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
   GUIDE: Your Forehand closely mirrors the pro at 100% overall similarity — no major mechanical gaps stood out. Power flows from the legs up through trunk rotation into the racket arm. Keep reinforcing what's working and chase consistency.
   cues: 
     [Mobility & activation] beginner — main: Cable triceps extension
@@ -64,25 +64,25 @@ mode=sequence similarity=1.00 handedness={"pro":"left","user":"left","mirrored":
 ========== MIRROR: novak vs mirror(novak) (expect ~1.0, mirrored) ==========
 mode=sequence similarity=1.00 handedness={"pro":"left","user":"right","mirrored":true} dtw=0.00 cov={"pro":0.927,"user":0.927}
   joint                   mean     max     pro    user    bias  sig
-  left_elbow              0.00    0.00   60.21   60.21    0.00  low
-  right_elbow             0.00    0.00   53.22   53.22    0.00  low
-  left_shoulder           0.00    0.00  133.50  133.50    0.00  low
-  right_shoulder          0.00    0.00  149.72  149.72    0.00  low
-  left_hip                0.00    0.00   23.95   23.95    0.00  low
-  right_hip               0.00    0.00   43.83   43.83    0.00  low
-  left_knee               0.00    0.00   18.60   18.60    0.00  low
-  right_knee              0.00    0.00   34.59   34.59    0.00  low
-  left_ankle              0.00    0.00  120.60  120.60    0.00  low
-  right_ankle             0.00    0.00  111.93  111.93    0.00  low
-  trunk_rotation          0.00    0.00   25.29   25.29    0.00  low
-  trunk_lean              0.00    0.00   13.99   13.99    0.00  low
-  shoulder_line_tilt      0.00    0.00   13.07   13.07    0.00  low
+  left_elbow              0.00    0.00   60.12   60.12    0.00  low
+  right_elbow             0.00    0.00   50.30   50.30    0.00  low
+  left_shoulder           0.00    0.00  135.97  135.97    0.00  low
+  right_shoulder          0.00    0.00  149.10  149.10    0.00  low
+  left_hip                0.00    0.00   24.04   24.04    0.00  low
+  right_hip               0.00    0.00   43.88   43.88    0.00  low
+  left_knee               0.00    0.00   19.04   19.04    0.00  low
+  right_knee              0.00    0.00   34.25   34.25    0.00  low
+  left_ankle              0.00    0.00  119.68  119.68    0.00  low
+  right_ankle             0.00    0.00  112.53  112.53    0.00  low
+  trunk_rotation          0.00    0.00   25.64   25.64    0.00  low
+  trunk_lean              0.00    0.00   13.59   13.59    0.00  low
+  shoulder_line_tilt      0.00    0.00   13.66   13.66    0.00  low
   → 0 high, 0 medium
   phases:
-    preparation    [0-23] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
-    load           [24-39] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
-    release        [40-48] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
-    follow_through [49-149] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    preparation    [0-48] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    load           [49-80] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    release        [81-89] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    follow_through [90-149] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
   GUIDE: Your Forehand closely mirrors the pro at 100% overall similarity — no major mechanical gaps stood out. Power flows from the legs up through trunk rotation into the racket arm. Keep reinforcing what's working and chase consistency.
   cues: 
     [Mobility & activation] beginner — main: Cable triceps extension
@@ -90,61 +90,61 @@ mode=sequence similarity=1.00 handedness={"pro":"left","user":"right","mirrored"
     [Skill & sequencing] beginner — main: Contact-point extension drill — freeze a long arm at the strike, Compact take-back drill — keep the racket inside the body line on the backswing, Rotational shadow swings staying tall through the turn
 
 ========== REAL: novak(pro) vs timo(user) ==========
-mode=sequence similarity=0.53 handedness={"pro":"left","user":"right","mirrored":true} dtw=1.42 cov={"pro":0.927,"user":1}
+mode=sequence similarity=0.53 handedness={"pro":"left","user":"right","mirrored":true} dtw=1.41 cov={"pro":0.927,"user":1}
   joint                   mean     max     pro    user    bias  sig
-  right_hip              28.62   75.50   44.76   20.26  -23.97  high
-  left_ankle             23.53   46.10  120.24   98.32  -22.40  high
-  right_shoulder         22.00   49.76  149.36  128.59  -19.89  high
-  right_elbow            27.04   48.87   57.27   41.12  -13.63  medium
-  left_hip               12.63   41.17   24.36   12.44  -12.43  medium
-  right_knee             20.48   59.22   36.45   25.04  -11.09  medium
-  right_ankle            19.74   35.83  112.57  122.35    9.97  medium
-  trunk_lean              8.90   26.71   13.99    6.50   -7.92  medium
-  left_knee               9.84   24.39   18.94   25.87    6.28  low
-  left_elbow             29.19   67.65   56.71   59.24    5.77  low
-  shoulder_line_tilt      6.14   19.09   13.07    9.47   -3.53  low
-  trunk_rotation         11.13   25.33   25.29   22.58   -3.24  low
-  left_shoulder          31.35   55.24  133.57  129.03   -2.60  low
+  right_hip              28.30   76.82   44.74   20.53  -23.60  high
+  left_ankle             23.42   42.46  119.61   98.34  -22.08  high
+  right_shoulder         19.44   44.38  147.73  128.78  -18.48  high
+  left_hip               12.67   41.17   24.45   12.44  -12.47  medium
+  right_knee             20.34   57.13   36.27   25.07  -10.89  medium
+  right_elbow            29.35   53.29   53.92   40.71  -10.61  medium
+  right_ankle            18.57   33.86  113.47  122.09    8.77  medium
+  trunk_lean              8.35   31.04   13.59    6.55   -7.35  medium
+  left_knee               9.60   23.45   19.40   25.92    5.96  low
+  left_shoulder          30.18   55.24  135.74  129.17   -4.69  low
+  shoulder_line_tilt      6.14   17.19   13.66    9.47   -4.14  low
+  left_elbow             31.23   72.09   57.10   58.38    4.11  low
+  trunk_rotation         10.30   25.28   25.64   22.70   -3.38  low
   → 3 high, 5 medium
   phases:
-    preparation    [0-23] top: right_shoulder Δ43.91, right_elbow Δ30.07, right_ankle Δ26.20
-    load           [24-39] top: left_elbow Δ65.99, left_ankle Δ41.22, right_hip Δ39.59
-    release        [40-48] top: left_hip Δ57.13, left_ankle Δ56.20, right_shoulder Δ50.56
-    follow_through [49-149] top: right_elbow Δ31.70, left_ankle Δ22.35, right_hip Δ28.71
+    preparation    [0-48] top: left_elbow Δ78.30, right_shoulder Δ35.24, right_hip Δ29.80
+    load           [49-80] top: left_shoulder Δ49.25, right_hip Δ45.81, right_knee Δ35.02
+    release        [81-89] top: right_hip Δ87.97, right_knee Δ86.85, left_shoulder Δ64.60
+    follow_through [90-149] top: left_shoulder Δ31.58, left_ankle Δ20.63, left_elbow Δ15.43
   GUIDE: Your Forehand reaches 53% overall similarity to the pro, with 6 areas worth addressing. The biggest is your Hip (24° off). Power flows from the legs up through trunk rotation into the racket arm.
-    #1 Hip: too little vs the pro — Prioritize this: sit into a deeper hip load during the unit turn, then drive up and through the ball. It shows up most during the load phase — focus your reps there.
-    #2 Ankle: too little vs the pro — Prioritize this: allow the shin to travel forward and lock the ankle firmly at contact. It shows up most during the release phase — focus your reps there.
-    #3 Shoulder: too little vs the pro — create more space between arm and torso in the take-back to lengthen the swing arc. It shows up most during the release phase — focus your reps there.
-    #4 Elbow: too little vs the pro — keep a relaxed bend in the take-back and let the forearm lag, then snap through contact. It shows up most during the preparation phase — focus your reps there.
-  cues: load the outside hip, then drive up | firm ankle at contact | make a bigger arc | relaxed lag, snap late
+    #1 Hip: too little vs the pro — Prioritize this: sit into a deeper hip load during the unit turn, then drive up and through the ball. It shows up most during the release phase — focus your reps there.
+    #2 Ankle: too little vs the pro — Prioritize this: allow the shin to travel forward and lock the ankle firmly at contact. It shows up most during the preparation phase — focus your reps there.
+    #3 Shoulder: too little vs the pro — create more space between arm and torso in the take-back to lengthen the swing arc. It shows up most during the preparation phase — focus your reps there.
+    #4 Knee: too little vs the pro — add a clear knee bend in the load, then push up off the court through contact. It shows up most during the release phase — focus your reps there.
+  cues: load the outside hip, then drive up | firm ankle at contact | make a bigger arc | bend to load, drive up
     [Mobility & activation] beginner — main: Romanian deadlift
     [Corrective strength] advanced — main: Romanian deadlift, Single-leg calf raise, Landmine press
     [Skill & sequencing] advanced — main: Loaded open-stance drives — coil onto the back hip and explode up into contact, Banded ankle dorsiflexion mobilizations, Full-extension swings reaching through a long contact zone
 
 ========== CALIBRATION: novak(pro) vs novak2 (different pro stroke — expect HIGH) ==========
-mode=sequence similarity=0.59 handedness={"pro":"left","user":"left","mirrored":false} dtw=1.26 cov={"pro":0.927,"user":1}
+mode=sequence similarity=0.60 handedness={"pro":"left","user":"left","mirrored":false} dtw=1.26 cov={"pro":0.927,"user":1}
   joint                   mean     max     pro    user    bias  sig
-  left_elbow             39.57   98.62   73.92   58.38  -13.36  medium
-  right_knee             12.33   46.59   31.99   22.67   -8.03  medium
-  left_ankle              8.27   20.24  119.14  114.12   -4.52  low
-  trunk_lean              6.12   23.46   13.06    8.94   -3.07  low
-  trunk_rotation          5.76   13.50   25.22   23.19   -2.56  low
-  left_shoulder          11.92   37.48  141.16  143.65    2.28  low
-  right_elbow            12.75   35.11   54.87   52.68   -1.68  low
-  right_shoulder          5.07   15.91  150.99  150.44   -1.13  low
-  right_ankle            16.49   43.66  114.47  112.36   -1.13  low
-  left_knee               6.40   23.30   17.24   15.97   -0.86  low
-  left_hip                9.16   26.55   23.57   24.37   -0.36  low
-  right_hip              15.55   50.86   42.32   41.42   -0.21  low
-  shoulder_line_tilt      4.57   12.21   12.91   13.48    0.18  low
-  → 0 high, 2 medium
+  left_elbow             33.27   86.32   58.43   45.74  -10.76  medium
+  right_elbow            10.24   40.05   51.24   60.67    7.65  medium
+  right_knee             12.66   45.61   31.34   23.02   -7.23  medium
+  left_ankle              7.76   19.07  118.60  113.98   -3.81  low
+  trunk_lean              5.01   21.76   12.60    8.67   -3.34  low
+  right_ankle            17.22   39.46  115.07  111.53   -2.95  low
+  trunk_rotation          7.02   18.39   25.06   22.60   -2.76  low
+  shoulder_line_tilt      4.35   11.62   13.37   13.14   -0.67  low
+  right_hip              15.69   48.95   41.31   41.45   -0.62  low
+  left_shoulder          12.20   40.57  141.82  141.93    0.51  low
+  left_hip                9.52   30.61   23.42   24.69    0.45  low
+  left_knee               6.43   19.50   18.01   17.28    0.24  low
+  right_shoulder          3.03   11.92  149.72  149.57    0.08  low
+  → 0 high, 3 medium
   phases:
-    preparation    [0-23] top: right_ankle Δ14.46, right_elbow Δ8.79, left_hip Δ4.57
-    load           [24-39] top: left_elbow Δ82.21, right_knee Δ20.22, left_ankle Δ10.62
-    release        [40-48] top: left_elbow Δ99.07, left_shoulder Δ53.37, left_hip Δ41.97
-    follow_through [49-149] top: right_knee Δ16.11, left_ankle Δ10.46, left_shoulder Δ15.47
-  GUIDE: Your Forehand reaches 59% overall similarity to the pro, with 2 areas worth addressing. The biggest is your Elbow (13° off). Power flows from the legs up through trunk rotation into the racket arm.
-    #1 Elbow: too little vs the pro — keep a relaxed bend in the take-back and let the forearm lag, then snap through contact. It shows up most during the release phase — focus your reps there.
+    preparation    [0-48] top: left_elbow Δ96.57, right_elbow Δ16.10, right_knee Δ8.51
+    load           [49-80] top: left_shoulder Δ35.68, left_elbow Δ30.67, right_knee Δ25.40
+    release        [81-89] top: right_knee Δ89.19, right_hip Δ64.65, left_hip Δ34.38
+    follow_through [90-149] top: right_elbow Δ68.39, left_elbow Δ31.93, right_ankle Δ22.25
+  GUIDE: Your Forehand reaches 61% overall similarity to the pro, with 2 areas worth addressing. The biggest is your Elbow (11° off). Power flows from the legs up through trunk rotation into the racket arm.
+    #1 Elbow: too little vs the pro — keep a relaxed bend in the take-back and let the forearm lag, then snap through contact. It shows up most during the preparation phase — focus your reps there.
     #2 Knee: too little vs the pro — add a clear knee bend in the load, then push up off the court through contact. It shows up most during the release phase — focus your reps there.
   cues: relaxed lag, snap late | bend to load, drive up
     [Mobility & activation] beginner — main: Cable triceps extension

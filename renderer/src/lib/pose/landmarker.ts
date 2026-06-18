@@ -12,7 +12,17 @@ const MODEL_URL =
 
 type RunningMode = "IMAGE" | "VIDEO";
 
-const landmarkers: Partial<Record<RunningMode, Promise<PoseLandmarker>>> = {};
+/**
+ * Cached landmarker instances. "VIDEO_TTA" holds the SECOND instance used for
+ * the horizontally-mirrored stream in flip-augmented video detection: VIDEO-
+ * mode landmarkers carry temporal tracking state, so the original and mirrored
+ * streams must each get their own instance rather than interleaving one.
+ * IMAGE-mode detection is stateless, so its mirrored pass reuses the one
+ * IMAGE instance.
+ */
+type InstanceKey = RunningMode | "VIDEO_TTA";
+
+const landmarkers: Partial<Record<InstanceKey, Promise<PoseLandmarker>>> = {};
 
 /**
  * Strictly-increasing timestamp clock for the shared VIDEO-mode landmarker.
@@ -30,8 +40,11 @@ const landmarkers: Partial<Record<RunningMode, Promise<PoseLandmarker>>> = {};
  */
 let videoClock = 0;
 
-async function getLandmarker(mode: RunningMode): Promise<PoseLandmarker> {
-  const existing = landmarkers[mode];
+async function getLandmarker(
+  mode: RunningMode,
+  key: InstanceKey = mode,
+): Promise<PoseLandmarker> {
+  const existing = landmarkers[key];
   if (existing) return existing;
   const p = (async () => {
     const fileset = await FilesetResolver.forVisionTasks(WASM_CDN);
@@ -48,19 +61,19 @@ async function getLandmarker(mode: RunningMode): Promise<PoseLandmarker> {
       outputSegmentationMasks: false,
     });
   })();
-  landmarkers[mode] = p;
+  landmarkers[key] = p;
   // If initialization fails (e.g. a transient network error fetching the WASM
   // runtime or the heavy model), evict the rejected promise so the next analysis
   // re-attempts instead of being permanently stuck with the cached rejection
   // until the app is restarted. The caller still observes this rejection.
   p.catch(() => {
-    if (landmarkers[mode] === p) delete landmarkers[mode];
+    if (landmarkers[key] === p) delete landmarkers[key];
   });
   return p;
 }
 
 export async function resetLandmarker(): Promise<void> {
-  for (const key of Object.keys(landmarkers) as RunningMode[]) {
+  for (const key of Object.keys(landmarkers) as InstanceKey[]) {
     const p = landmarkers[key];
     if (!p) continue;
     try {
@@ -100,13 +113,125 @@ function toFrame(result: PoseLandmarkerResult): PoseFrame | null {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Flip-augmented detection (test-time augmentation).
+//
+// BlazePose-family models carry small left/right asymmetric biases and produce
+// independent noise per detection. Detecting the SAME frame twice — once as-is
+// and once horizontally mirrored — then mapping the mirrored result back and
+// merging, cancels the asymmetric bias and reduces single-detection noise at
+// the cost of a second inference per frame.
+// ---------------------------------------------------------------------------
+
+/** L/R landmark partner table for mapping a mirrored detection back. */
+const FLIP_PARTNER: number[] = (() => {
+  const pairs: [number, number][] = [
+    [1, 4], [2, 5], [3, 6], // eyes (inner/center/outer)
+    [7, 8], // ears
+    [9, 10], // mouth corners
+    [11, 12], // shoulders
+    [13, 14], // elbows
+    [15, 16], // wrists
+    [17, 18], // pinkies
+    [19, 20], // indexes
+    [21, 22], // thumbs
+    [23, 24], // hips
+    [25, 26], // knees
+    [27, 28], // ankles
+    [29, 30], // heels
+    [31, 32], // foot indexes
+  ];
+  const partner = Array.from({ length: 33 }, (_, i) => i);
+  for (const [a, b] of pairs) {
+    partner[a] = b;
+    partner[b] = a;
+  }
+  return partner;
+})();
+
+/**
+ * Two same-frame estimates of one landmark agreeing within this distance
+ * (meters, world coordinates) are averaged. Beyond it they are treated as a
+ * detector disagreement — usually a depth/left-right flip in one of the two —
+ * and averaging would fabricate a pose neither detection saw.
+ */
+const TTA_AGREE_M = 0.15;
+
+/** Map a detection of the mirrored image back into original-image space:
+ * negate x and swap each left landmark with its right partner. */
+function unmirrorFrame(f: PoseFrame): PoseFrame {
+  return f.map((_, i) => {
+    const src = f[FLIP_PARTNER[i]];
+    return { x: -src.x, y: src.y, z: src.z, visibility: src.visibility };
+  });
+}
+
+/**
+ * Merge the primary detection with the (already unmirrored) flipped detection.
+ *  - Agreement: average position and visibility — bias cancellation.
+ *  - Disagreement: keep the primary position but report the pair's minimum
+ *    visibility, so the downstream cleanup (gap-fill / despike / confidence
+ *    weighting) treats the landmark as unreliable instead of trusting a frame
+ *    the detector itself can't reproduce under a mirror.
+ */
+function mergeTta(primary: PoseFrame, flipped: PoseFrame): PoseFrame {
+  return primary.map((p, i) => {
+    const q = flipped[i];
+    const d = Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z);
+    if (d <= TTA_AGREE_M) {
+      return {
+        x: (p.x + q.x) / 2,
+        y: (p.y + q.y) / 2,
+        z: (p.z + q.z) / 2,
+        visibility: (p.visibility + q.visibility) / 2,
+      };
+    }
+    return { x: p.x, y: p.y, z: p.z, visibility: Math.min(p.visibility, q.visibility) };
+  });
+}
+
+/** Lazily-created canvas that holds the horizontally mirrored source frame. */
+let flipCanvas: HTMLCanvasElement | null = null;
+function mirrorOnCanvas(
+  src: HTMLImageElement | HTMLCanvasElement | ImageBitmap | HTMLVideoElement,
+  w: number,
+  h: number,
+): HTMLCanvasElement {
+  if (!flipCanvas) flipCanvas = document.createElement("canvas");
+  if (flipCanvas.width !== w) flipCanvas.width = w;
+  if (flipCanvas.height !== h) flipCanvas.height = h;
+  const ctx = flipCanvas.getContext("2d");
+  if (!ctx) throw new Error("Could not get 2D canvas context for TTA mirroring");
+  ctx.setTransform(-1, 0, 0, 1, w, 0);
+  ctx.drawImage(src as CanvasImageSource, 0, 0, w, h);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  return flipCanvas;
+}
+
+export interface DetectOptions {
+  /** Flip-augmented detection: a second inference on the mirrored frame,
+   * merged back. Defaults to true (accuracy over speed). */
+  tta?: boolean;
+}
+
 /** Extract pose landmarks from a still image using an IMAGE-mode landmarker. */
 export async function detectImage(
   image: HTMLImageElement | HTMLCanvasElement | ImageBitmap,
+  opts: DetectOptions = {},
 ): Promise<PoseFrame | null> {
   const lm = await getLandmarker("IMAGE");
   const res = lm.detect(image as unknown as HTMLImageElement);
-  return toFrame(res);
+  const primary = toFrame(res);
+  if (opts.tta === false) return primary;
+  const w = (image as { width: number }).width;
+  const h = (image as { height: number }).height;
+  if (!(w > 0) || !(h > 0)) return primary;
+  const resF = lm.detect(mirrorOnCanvas(image, w, h) as unknown as HTMLImageElement);
+  const flipped = toFrame(resF);
+  if (!flipped) return primary;
+  const unmirrored = unmirrorFrame(flipped);
+  // Primary dropout but the mirrored view detected — recover the frame.
+  return primary ? mergeTta(primary, unmirrored) : unmirrored;
 }
 
 export interface ExtractionProgress {
@@ -122,9 +247,11 @@ export async function extractVideo(
     targetFps?: number;
     onProgress?: (p: ExtractionProgress) => void;
     maxFrames?: number;
-  } = {},
+  } & DetectOptions = {},
 ): Promise<{ frames: PoseFrame[]; fps: number; duration: number }> {
   const lm = await getLandmarker("VIDEO");
+  // Flip-augmented detection: the mirrored stream tracks on its own instance.
+  const lmF = opts.tta === false ? null : await getLandmarker("VIDEO", "VIDEO_TTA");
   const duration = video.duration;
   if (!isFinite(duration) || duration <= 0) {
     throw new Error("Video duration is not available yet — wait for 'loadedmetadata'.");
@@ -156,7 +283,14 @@ export async function extractVideo(
     if (ts <= lastTs) ts = lastTs + 1;
     lastTs = ts;
     const res = lm.detectForVideo(canvas, ts);
-    const f = toFrame(res);
+    let f = toFrame(res);
+    if (lmF) {
+      const resF = lmF.detectForVideo(mirrorOnCanvas(canvas, canvas.width, canvas.height), ts);
+      const flipped = toFrame(resF);
+      if (flipped && f) f = mergeTta(f, unmirrorFrame(flipped));
+      // Primary dropout but the mirrored view detected — recover the frame.
+      else if (flipped) f = unmirrorFrame(flipped);
+    }
     frames.push(f ?? emptyFrame());
     opts.onProgress?.({ completed: (i + 1) / total, frame: i + 1, totalFrames: total });
   }
@@ -165,6 +299,20 @@ export async function extractVideo(
   videoClock = lastTs + 1;
   return { frames, fps, duration };
 }
+
+/**
+ * Internal pieces exposed for the dev validation probes and unit tests ONLY
+ * (the TTA merge math is pure and Node-testable; the VIDEO-mode dual-instance
+ * path can't be driven through a real <video> in the test environment, so the
+ * probe replicates extractVideo's loop against these same internals).
+ */
+export const __testing = {
+  getLandmarker,
+  mergeTta,
+  unmirrorFrame,
+  mirrorOnCanvas,
+  TTA_AGREE_M,
+};
 
 function seekTo(video: HTMLVideoElement, t: number): Promise<void> {
   return new Promise((resolve, reject) => {

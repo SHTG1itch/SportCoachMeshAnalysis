@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { fillGaps, smoothFrames, detectionCoverage, VIS_THRESHOLD } from "./prepare";
+import {
+  fillGaps,
+  despikeFrames,
+  smoothFrames,
+  detectionCoverage,
+  VIS_THRESHOLD,
+} from "./prepare";
 import { L, type PoseFrame } from "./types";
 import { computeAngles } from "./angles";
 
@@ -148,6 +154,86 @@ describe("smoothFrames", () => {
     const f = standingFrame();
     const smoothed = smoothFrames([f], 1);
     expect(smoothed[0][L.RIGHT_WRIST].x).toBeCloseTo(f[L.RIGHT_WRIST].x, 9);
+  });
+});
+
+describe("despikeFrames", () => {
+  // A still stance with one landmark teleporting away and back — the
+  // high-confidence detector glitch despikeFrames exists to repair.
+  function spikeSeq(spikeAt: number[], n = 12): PoseFrame[] {
+    const frames: PoseFrame[] = [];
+    for (let i = 0; i < n; i++) {
+      const f = standingFrame();
+      if (spikeAt.includes(i)) {
+        f[L.RIGHT_SHOULDER] = { x: 1.2, y: 0.4, z: 0.5, visibility: 1 };
+      }
+      frames.push(f);
+    }
+    return frames;
+  }
+
+  it("repairs a single-frame teleport back to the stable position", () => {
+    const fixed = despikeFrames(spikeSeq([5]));
+    const sh = fixed[5][L.RIGHT_SHOULDER];
+    expect(sh.x).toBeCloseTo(0.2, 6);
+    expect(sh.y).toBeCloseTo(1.4, 6);
+    expect(sh.z).toBeCloseTo(0, 6);
+  });
+
+  it("repairs a two-frame glitch run", () => {
+    const fixed = despikeFrames(spikeSeq([5, 6]));
+    for (const i of [5, 6]) {
+      expect(fixed[i][L.RIGHT_SHOULDER].x).toBeCloseTo(0.2, 6);
+      expect(fixed[i][L.RIGHT_SHOULDER].y).toBeCloseTo(1.4, 6);
+    }
+  });
+
+  it("leaves visibility untouched so downstream weighting stays honest", () => {
+    const frames = spikeSeq([5]);
+    frames[5][L.RIGHT_SHOULDER].visibility = 0.97;
+    const fixed = despikeFrames(frames);
+    expect(fixed[5][L.RIGHT_SHOULDER].visibility).toBe(0.97);
+  });
+
+  it("does not clip genuinely fast smooth motion", () => {
+    // Wrist sweeping 0.25 m per frame in one direction — much farther per frame
+    // than the spike floor, but smooth, so neighbours spread raises the bar.
+    const frames: PoseFrame[] = [];
+    for (let i = 0; i < 12; i++) {
+      const f = standingFrame();
+      f[L.RIGHT_WRIST] = { x: 0.35 + 0.25 * i, y: 0.85, z: 0, visibility: 1 };
+      frames.push(f);
+    }
+    const fixed = despikeFrames(frames);
+    for (let i = 0; i < frames.length; i++) {
+      expect(fixed[i][L.RIGHT_WRIST].x).toBeCloseTo(frames[i][L.RIGHT_WRIST].x, 6);
+    }
+  });
+
+  it("does not flag a sharp but physically plausible direction reversal", () => {
+    // Out-and-back path with 0.08 m deviation at the apex — under the floor.
+    const xs = [0.35, 0.39, 0.43, 0.47, 0.43, 0.39, 0.35, 0.35, 0.35, 0.35];
+    const frames = xs.map((x) => {
+      const f = standingFrame();
+      f[L.RIGHT_WRIST] = { x, y: 0.85, z: 0, visibility: 1 };
+      return f;
+    });
+    const fixed = despikeFrames(frames);
+    for (let i = 0; i < frames.length; i++) {
+      expect(fixed[i][L.RIGHT_WRIST].x).toBeCloseTo(frames[i][L.RIGHT_WRIST].x, 6);
+    }
+  });
+
+  it("is a no-op for clips too short to judge and does not mutate input", () => {
+    const frames = spikeSeq([1], 3);
+    const fixed = despikeFrames(frames);
+    expect(fixed[1][L.RIGHT_SHOULDER].x).toBeCloseTo(1.2, 6);
+    expect(fixed[0]).not.toBe(frames[0]);
+  });
+
+  it("holds the nearest good frame across a glitch at the clip edge", () => {
+    const fixed = despikeFrames(spikeSeq([0]));
+    expect(fixed[0][L.RIGHT_SHOULDER].x).toBeCloseTo(0.2, 6);
   });
 });
 

@@ -1,0 +1,51 @@
+
+[novak_fh] landmark spike-and-return (gap-filled, pre-smoothing; world meters)
+  total=33 over 150 frames x 12 landmarks
+    Lsho: n=4 maxDev=0.65m meanVisAtSpike=1.00
+    Rsho: n=8 maxDev=0.97m meanVisAtSpike=1.00
+    Lelb: n=3 maxDev=0.19m meanVisAtSpike=0.86
+    Relb: n=2 maxDev=0.77m meanVisAtSpike=0.68
+    Lwri: n=2 maxDev=0.50m meanVisAtSpike=0.83
+    Rwri: n=3 maxDev=0.44m meanVisAtSpike=0.82
+    Lkne: n=1 maxDev=0.12m meanVisAtSpike=0.85
+    Rkne: n=2 maxDev=0.34m meanVisAtSpike=0.80
+    Lank: n=4 maxDev=1.19m meanVisAtSpike=0.94
+    Rank: n=4 maxDev=0.75m meanVisAtSpike=0.81
+
+[novak_fh] angle spike-and-return AFTER current pipeline (degrees)
+    left_hip             n>20°=1 n>30°=0 max=22.29°  
+    right_ankle          n>20°=1 n>30°=0 max=27.13°  
+    trunk_rotation       n>20°=1 n>30°=1 max=53.18°  f98:53.18°
+
+[timo_fh] landmark spike-and-return (gap-filled, pre-smoothing; world meters)
+  total=6 over 120 frames x 12 landmarks
+    Lwri: n=4 maxDev=0.37m meanVisAtSpike=0.69
+    Lank: n=1 maxDev=0.28m meanVisAtSpike=0.39
+    Rank: n=1 maxDev=0.14m meanVisAtSpike=0.89
+
+[timo_fh] angle spike-and-return AFTER current pipeline (degrees)
+
+[novak2_fh] landmark spike-and-return (gap-filled, pre-smoothing; world meters)
+  total=17 over 150 frames x 12 landmarks
+    Lsho: n=3 maxDev=0.97m meanVisAtSpike=1.00
+    Rsho: n=3 maxDev=1.00m meanVisAtSpike=1.00
+    Relb: n=2 maxDev=0.94m meanVisAtSpike=0.96
+    Lwri: n=1 maxDev=0.15m meanVisAtSpike=0.97
+    Rwri: n=2 maxDev=1.11m meanVisAtSpike=0.96
+    Lkne: n=1 maxDev=0.70m meanVisAtSpike=0.44
+    Rkne: n=2 maxDev=0.51m meanVisAtSpike=0.99
+    Lank: n=1 maxDev=1.01m meanVisAtSpike=0.68
+    Rank: n=2 maxDev=0.76m meanVisAtSpike=0.99
+
+[novak2_fh] angle spike-and-return AFTER current pipeline (degrees)
+    right_ankle          n>20°=1 n>30°=0 max=25.35°  
+
+[novak_a] landmark spike-and-return (gap-filled, pre-smoothing; world meters)
+  total=4 over 120 frames x 12 landmarks
+    Rkne: n=1 maxDev=0.14m meanVisAtSpike=0.66
+    Lank: n=2 maxDev=0.15m meanVisAtSpike=0.98
+    Rank: n=1 maxDev=0.29m meanVisAtSpike=0.76
+
+[novak_a] angle spike-and-return AFTER current pipeline (degrees)
+    right_elbow          n>20°=1 n>30°=1 max=38.89°  f83:38.89°
+    right_ankle          n>20°=1 n>30°=0 max=21.50°  

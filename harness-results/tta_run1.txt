@@ -1,0 +1,124 @@
+STATUS: DONE
+Harness config: pro=/testclips/novak_fh user=/testclips/timo_fh sport=tennis shot=Forehand proKind=video maxFrames=240 selftest=false
+· pro frames: 150
+· user frames: 120
+· saved frames_novak_fh_tta (292195 bytes)
+· saved frames_timo_fh_tta (239048 bytes)
+
+###### COORDINATE-CONVENTION & ANGLE-SANITY DIAGNOSTICS ######
+
+[PRO /testclips/novak_fh] 150 frames, 143 detected (95.33%)
+  median(shoulderMid.y - hipMid.y) = -0.47  (- ⇒ shoulders ABOVE hips at -y ⇒ y-DOWN)
+  median(hipMid.y - ankleMid.y)    = -0.59
+  sample mid-frame raw world landmarks:
+    NOSE           x=0.31 y=-0.55 z=0.02 vis=1.00
+    L_SHOULDER     x=0.13 y=-0.49 z=0.15 vis=1.00
+    R_SHOULDER     x=0.23 y=-0.42 z=-0.06 vis=1.00
+    L_HIP          x=-0.06 y=-0.02 z=0.07 vis=1.00
+    R_HIP          x=0.06 y=0.01 z=-0.07 vis=1.00
+    L_ANKLE        x=-0.51 y=0.47 z=0.12 vis=0.97
+    R_ANKLE        x=0.52 y=0.50 z=0.00 vis=0.98
+  mean angle features over detected frames:
+    left_elbow              56.38°
+    right_elbow             59.54°
+    left_shoulder          127.78°
+    right_shoulder         136.25°
+    left_hip                37.68°
+    right_hip               47.81°
+    left_knee               27.92°
+    right_knee              41.03°
+    left_ankle             121.65°
+    right_ankle            113.66°
+    trunk_rotation          20.03°
+    trunk_lean             152.45°  ⚠ ≈180 ⇒ y-DOWN (sign flip)
+    shoulder_line_tilt      11.58°  ✓ near-level
+
+[USER /testclips/timo_fh] 120 frames, 120 detected (100.00%)
+  median(shoulderMid.y - hipMid.y) = -0.50  (- ⇒ shoulders ABOVE hips at -y ⇒ y-DOWN)
+  median(hipMid.y - ankleMid.y)    = -0.73
+  sample mid-frame raw world landmarks:
+    NOSE           x=0.11 y=-0.64 z=-0.20 vis=1.00
+    L_SHOULDER     x=0.11 y=-0.56 z=0.11 vis=1.00
+    R_SHOULDER     x=-0.04 y=-0.48 z=-0.15 vis=1.00
+    L_HIP          x=0.06 y=-0.00 z=0.08 vis=1.00
+    R_HIP          x=-0.06 y=-0.00 z=-0.07 vis=1.00
+    L_ANKLE        x=0.10 y=0.77 z=0.10 vis=0.95
+    R_ANKLE        x=-0.34 y=0.71 z=-0.07 vis=0.99
+  mean angle features over detected frames:
+    left_elbow              64.82°
+    right_elbow             76.48°
+    left_shoulder          141.99°
+    right_shoulder         130.70°
+    left_hip                 9.42°
+    right_hip               14.85°
+    left_knee               20.91°
+    right_knee              31.17°
+    left_ankle             110.73°
+    right_ankle            100.96°
+    trunk_rotation          10.09°
+    trunk_lean             174.13°  ⚠ ≈180 ⇒ y-DOWN (sign flip)
+    shoulder_line_tilt       5.23°  ✓ near-level
+
+========== COMPARE: PRO vs USER ==========
+mode=sequence  overallSimilarity=0.57  handedness={"pro":"left","user":"right","mirrored":true}
+coverage={"pro":0.953,"user":1}  proFrames=150 userFrames=120
+dtw.distance=1.28
+
+joint deltas (sorted by impact):
+  joint                   mean     max     pro    user    bias  sig
+  right_hip              28.02   72.33   39.07   13.01  -26.24  high
+  left_ankle             21.84   47.82  120.19   99.17  -20.88  high
+  left_shoulder          32.17   65.81  138.52  121.50  -13.05  medium
+  left_hip               12.37   40.94   28.34   16.89  -11.40  medium
+  right_knee             21.31   62.63   32.89   21.84  -11.21  medium
+  left_elbow             15.83   35.99   53.96   64.48   10.80  medium
+  trunk_lean              9.11   36.74   13.67    6.15   -7.79  medium
+  left_knee              10.93   31.21   17.82   25.50    7.13  medium
+  right_elbow            15.30   27.99   51.87   47.44   -5.77  low
+  right_ankle            14.10   27.56  115.95  112.08   -3.59  low
+  shoulder_line_tilt      6.73   17.21    8.46    5.10   -3.37  low
+  right_shoulder         12.96   29.52  142.01  138.61   -3.05  low
+  trunk_rotation          9.16   27.24   12.18   10.39   -2.13  low
+
+phases:
+  preparation      [0-23]  top: right_shoulder Δ23.54, left_knee Δ21.66, right_hip Δ19.46, right_elbow Δ18.42
+  load             [24-39]  top: right_hip Δ39.84, left_ankle Δ28.80, right_knee Δ17.31, right_shoulder Δ14.87
+  release          [40-52]  top: left_hip Δ45.83, left_ankle Δ41.94, trunk_lean Δ25.81, right_knee Δ23.96
+  follow_through   [53-149]  top: right_hip Δ29.86, left_ankle Δ19.44, left_shoulder Δ40.34, right_knee Δ27.19
+
+--- GUIDE ---
+summary: Your Forehand reaches 57% overall similarity to the pro, with 6 areas worth addressing. The biggest is your Hip (26° off). Power flows from the legs up through trunk rotation into the racket arm.
+strengths: Your trunk rotation closely matches the pro (within 2°). | Your shoulder line tilt closely matches the pro (within 3°).
+cues: load the outside hip, then drive up | firm ankle at contact | make a bigger arc | bend to load, drive up
+  issue1: Hip: too little vs the pro
+    observation: Your hips are more extended/upright than the pro's (you 13.01° vs pro 39.07°, about 26° less) — a major gap.
+    cause: standing too tall means the legs never load, so the stroke becomes all arm.
+    fix: Prioritize this: sit into a deeper hip load during the unit turn, then drive up and through the ball. It shows up most during the load phase — focus your reps there.
+  issue2: Ankle: too little vs the pro
+    observation: Your ankle is stiffer/less flexed than the pro's (you 99.17° vs pro 120.19°, about 21° less) — a major gap.
+    cause: limited ankle range reduces ground force and a stable base at contact.
+    fix: Prioritize this: allow the shin to travel forward and lock the ankle firmly at contact. It shows up most during the release phase — focus your reps there.
+  issue3: Shoulder: too little vs the pro
+    observation: Your arm stays closer to the torso than the pro's (you 121.5° vs pro 138.52°, about 13° less) — a clear gap.
+    cause: too little arm separation shrinks the swing arc and the racket-head speed it can build.
+    fix: create more space between arm and torso in the take-back to lengthen the swing arc. It shows up most during the follow through phase — focus your reps there.
+  issue4: Knee: too little vs the pro
+    observation: Your knee is straighter than the pro's (you 21.84° vs pro 32.89°, about 11° less) — a small gap.
+    cause: stiff, straight knees skip the leg drive that powers a modern groundstroke.
+    fix: add a clear knee bend in the load, then push up off the court through contact. It shows up most during the release phase — focus your reps there.
+
+--- WORKOUTS ---
+  [Mobility & activation] beginner 10min  targets=right_hip,left_ankle,left_shoulder
+    focus: Free up and prime the joints flagged in your Forehand.
+    main: Romanian deadlift
+    notes: Do this on training days before skill work.
+  [Corrective strength] advanced 23min  targets=right_hip,left_ankle,left_shoulder
+    focus: Build strength where your mechanics differ most from the pro: hip (26°), ankle (21°), shoulder (13°).
+    main: Romanian deadlift | Single-leg calf raise | Landmine press
+    notes: 2–3× per week with a day of recovery between sessions. Push the main lifts, but end a set the moment form degrades.
+  [Skill & sequencing] advanced 23min  targets=right_hip,left_ankle,left_shoulder
+    focus: Transfer the corrections into your tennis forehand.
+    main: Loaded open-stance drives — coil onto the back hip and explode up into contact | Banded ankle dorsiflexion mobilizations | Full-extension swings reaching through a long contact zone
+    notes: Pay attention to the preparation → load → release → follow through sequence.
+
+###### DONE ######

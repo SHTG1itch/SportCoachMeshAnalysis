@@ -59,6 +59,11 @@ const SHOT = qs.get("shot") ?? "Forehand";
 const PRO_KIND = (qs.get("proKind") ?? "video") as "video" | "image";
 const MAX_FRAMES = Number(qs.get("maxFrames") ?? 240);
 const SELFTEST = qs.get("selftest") === "1";
+// Flip-augmented detection. Default OFF in the harness (the pre-TTA fixtures
+// were captured without it); pass tta=1 to extract with it and save fixtures
+// under a `_tta` suffix so both variants can be compared in Node.
+const TTA = qs.get("tta") === "1";
+const SAVE_SUFFIX = TTA ? "_tta" : "";
 
 const log = (...a: unknown[]) => {
   console.log("[HARNESS]", ...a);
@@ -113,7 +118,7 @@ async function extractImageSeq(dir: string, label: string, max: number): Promise
     // non-image response as the end of the sequence.
     if (!blob.type.startsWith("image/")) break;
     const bmp = await createImageBitmap(blob);
-    const fr = await detectImage(bmp);
+    const fr = await detectImage(bmp, { tta: TTA });
     bmp.close();
     frames.push(fr ?? emptyFrame());
     if (i % 10 === 0 || i === 1) setStatus(`${label} frame ${i}`);
@@ -125,7 +130,7 @@ async function detectSingleImage(url: string): Promise<PoseFrame> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`fetch ${url} → ${res.status}`);
   const bmp = await createImageBitmap(await res.blob());
-  const fr = await detectImage(bmp);
+  const fr = await detectImage(bmp, { tta: TTA });
   bmp.close();
   if (!fr) throw new Error(`no pose detected in ${url}`);
   return fr;
@@ -293,8 +298,8 @@ async function main() {
 
   // Persist raw extracted landmarks so the math can be iterated on in Node
   // (decoupled from browser/extension flakiness).
-  await postRaw(`frames_${clipName(PRO)}`, { fps: proFps, kind: PRO_KIND, frames: proFrames });
-  await postRaw(`frames_${clipName(USER)}`, { fps: userFps, kind: "video", frames: userFrames });
+  await postRaw(`frames_${clipName(PRO)}${SAVE_SUFFIX}`, { fps: proFps, kind: PRO_KIND, frames: proFrames });
+  await postRaw(`frames_${clipName(USER)}${SAVE_SUFFIX}`, { fps: userFps, kind: "video", frames: userFrames });
 
   emit(`\n###### COORDINATE-CONVENTION & ANGLE-SANITY DIAGNOSTICS ######`);
   conventionDiag("PRO " + PRO, proFrames);
