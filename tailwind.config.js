@@ -1,32 +1,39 @@
 /** @type {import('tailwindcss').Config} */
+// Colors resolve through CSS variables (space-separated RGB triples) so the whole
+// palette can be re-themed at runtime by swapping the variables. The default
+// (`:root`) values in styles.css are byte-identical to the previous hard-coded
+// dark hex, so the dark theme renders exactly as before; the `.light` class
+// overrides the same variables for light mode.
+const c = (v) => `rgb(var(${v}) / <alpha-value>)`;
+
 export default {
   content: ["./renderer/index.html", "./renderer/src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
         canvas: {
-          900: "#07090e",
-          800: "#0b0d12",
-          700: "#11141b",
-          600: "#161924",
-          500: "#1f2431",
+          900: c("--c-canvas-900"),
+          800: c("--c-canvas-800"),
+          700: c("--c-canvas-700"),
+          600: c("--c-canvas-600"),
+          500: c("--c-canvas-500"),
         },
         ink: {
-          50: "#f4f6fb",
-          100: "#e5e9f2",
-          200: "#c9cfdd",
-          300: "#9aa3b7",
-          400: "#6e7689",
-          500: "#4e5566",
+          50: c("--c-ink-50"),
+          100: c("--c-ink-100"),
+          200: c("--c-ink-200"),
+          300: c("--c-ink-300"),
+          400: c("--c-ink-400"),
+          500: c("--c-ink-500"),
         },
         accent: {
-          400: "#7ab6ff",
-          500: "#4a8ffd",
-          600: "#2f6fe3",
+          400: c("--c-accent-400"),
+          500: c("--c-accent-500"),
+          600: c("--c-accent-600"),
         },
-        ok: "#22c38a",
-        warn: "#f6b44d",
-        bad: "#ef5f6b",
+        ok: c("--c-ok"),
+        warn: c("--c-warn"),
+        bad: c("--c-bad"),
       },
       fontFamily: {
         sans: [

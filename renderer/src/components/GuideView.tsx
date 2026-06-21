@@ -42,17 +42,27 @@ export function GuideView({ guide }: { guide: ImprovementGuide }) {
                   </div>
                 )}
                 <div className="text-sm text-ink-200 mt-2">
-                  <span className="text-ink-400">What's happening: </span>
+                  <span className="text-ink-400">Mesh difference: </span>
                   {issue.observation}
                 </div>
                 <div className="text-sm text-ink-200 mt-1">
-                  <span className="text-ink-400">Why: </span>
+                  <span className="text-ink-400">Driven by: </span>
                   {issue.cause}
                 </div>
                 <div className="text-sm text-accent-400 mt-1">
-                  <span className="text-accent-400/70">Fix: </span>
+                  <span className="text-accent-400/70">To match the pro: </span>
                   {issue.fix}
                 </div>
+                {issue.muscles && issue.muscles.length > 0 && (
+                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs text-ink-400">Train:</span>
+                    {issue.muscles.map((m) => (
+                      <span key={m} className="chip">
+                        {m}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

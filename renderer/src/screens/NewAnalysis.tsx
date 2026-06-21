@@ -1,18 +1,39 @@
 import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
-import { ArrowRight, Play } from "lucide-react";
-import { SPORTS } from "../lib/sports";
+import { ArrowRight, Play, X, Info } from "lucide-react";
+import { SPORTS, findSport } from "../lib/sports";
 import { MediaDrop } from "../components/MediaDrop";
 import { runAnalysis, buildRecord, type AnalyzeProgress } from "../lib/analyze";
+import { poseToDataUrl } from "../lib/pose/render";
 import { useStore } from "../store";
-import type { SportMeta } from "@shared/types";
+import type { AnalysisReport, SportMeta } from "@shared/types";
+import type { PoseFrame } from "../lib/pose/types";
+
+/** A small skeleton render of the user's contact-moment pose, used as the
+ * history / home thumbnail so saved analyses are distinguishable at a glance. */
+function userKeyThumbnail(report: AnalysisReport): string | undefined {
+  const m = report.mesh;
+  if (!m || m.pairs.length === 0) return undefined;
+  const pose = m.pairs[Math.min(m.keyIndex, m.pairs.length - 1)].user as PoseFrame;
+  return (
+    poseToDataUrl(pose, 96, {
+      bone: "#22c38a",
+      joint: "#5be0ad",
+      background: "#0b0d12",
+    }) ?? undefined
+  );
+}
 
 export function NewAnalysis() {
   const go = useStore((s) => s.go);
   const refresh = useStore((s) => s.refresh);
+  const route = useStore((s) => s.route);
 
-  const [sport, setSport] = useState<SportMeta>(SPORTS[0]);
-  const [shot, setShot] = useState<string>(SPORTS[0].shots[0]);
+  // Honor a sport pre-selected from the Home sport cards (route.sportId).
+  const initialSport =
+    (route.name === "new" && route.sportId && findSport(route.sportId)) || SPORTS[0];
+  const [sport, setSport] = useState<SportMeta>(initialSport);
+  const [shot, setShot] = useState<string>(initialSport.shots[0]);
   const [proFile, setProFile] = useState<File | null>(null);
   const [userFile, setUserFile] = useState<File | null>(null);
   const [running, setRunning] = useState(false);
@@ -25,6 +46,7 @@ export function NewAnalysis() {
   // whatever screen they moved to and back into the result view. The analysis is
   // still saved, so it shows up in History either way.
   const mountedRef = useRef(true);
+  const abortRef = useRef<AbortController | null>(null);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -34,26 +56,38 @@ export function NewAnalysis() {
 
   const canRun = !!proFile && !!userFile && !running;
 
+  const cancel = () => {
+    abortRef.current?.abort();
+  };
+
   const start = async () => {
     if (!proFile || !userFile) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRunning(true);
     setError(null);
     setProgress({ stage: "loading_pro", message: "Starting…", progress: 0 });
     try {
       const proKind = proFile.type.startsWith("image/") ? "image" : "video";
       const report = await runAnalysis(
-        { sport, shot, proFile, userFile, proKind },
+        { sport, shot, proFile, userFile, proKind, signal: controller.signal },
         setProgress,
       );
-      const record = buildRecord(report, undefined);
+      const record = buildRecord(report, userKeyThumbnail(report));
       await window.app.saveAnalysis(record);
       await refresh();
       if (!mountedRef.current) return; // user left this screen — don't force-navigate
       go({ name: "analysis", record });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (mountedRef.current) setError(msg);
+      // A user-initiated cancel is not an error — just reset the form.
+      if (e instanceof DOMException && e.name === "AbortError") {
+        if (mountedRef.current) setProgress(null);
+      } else {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (mountedRef.current) setError(msg);
+      }
     } finally {
+      abortRef.current = null;
       if (mountedRef.current) setRunning(false);
     }
   };
@@ -116,6 +150,14 @@ export function NewAnalysis() {
             hint="Video of your technique (≤ 20s)"
           />
         </div>
+        <div className="mt-4 flex items-start gap-2 text-xs text-ink-400">
+          <Info size={14} className="mt-0.5 shrink-0 text-accent-400" />
+          <p>
+            Best results: film side-on with the <span className="text-ink-200">whole body in frame</span>,
+            one clean rep, steady camera, and good lighting. Match the pro's camera angle as closely
+            as you can. Clips over ~20s are sampled at a lower frame rate.
+          </p>
+        </div>
       </section>
 
       {error && (
@@ -140,9 +182,15 @@ export function NewAnalysis() {
       )}
 
       <div className="flex items-center justify-end gap-3">
-        <button onClick={() => go({ name: "home" })} className="btn-subtle">
-          Cancel
-        </button>
+        {running ? (
+          <button onClick={cancel} className="btn-subtle text-bad hover:text-bad">
+            <X size={14} /> Stop analysis
+          </button>
+        ) : (
+          <button onClick={() => go({ name: "home" })} className="btn-subtle">
+            Cancel
+          </button>
+        )}
         <button onClick={start} disabled={!canRun} className="btn-primary">
           {running ? (
             <>

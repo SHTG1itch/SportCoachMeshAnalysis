@@ -28,9 +28,9 @@ function delta(
   };
 }
 
-function req(overrides: Partial<GuideRequest["numericReport"]> = {}): GuideRequest {
+function req(overrides: Partial<GuideRequest["numericReport"]> = {}, sport: SportMeta = SPORT): GuideRequest {
   return {
-    sport: SPORT,
+    sport,
     shot: "Forehand",
     numericReport: {
       overallSimilarity: 0.7,
@@ -75,7 +75,7 @@ describe("native coach engine", () => {
     expect(trunk.title.toLowerCase()).toContain("too little"); // -12
   });
 
-  it("grounds the observation in the actual numbers", () => {
+  it("grounds the observation in the actual numbers (the mesh mismatch)", () => {
     const { guide } = generateGuideAndWorkouts(req());
     const elbow = guide.keyIssues.find((i) => i.joint === "right_elbow")!;
     expect(elbow.observation).toContain("18°"); // the gap
@@ -83,9 +83,91 @@ describe("native coach engine", () => {
     expect(elbow.observation).toContain("100°"); // pro value
   });
 
+  it("frames the fix as matching the pro's skeleton", () => {
+    const { guide } = generateGuideAndWorkouts(req());
+    for (const issue of guide.keyIssues) {
+      expect(issue.fix.toLowerCase()).toContain("match the pro");
+    }
+  });
+
   it("orders issues by magnitude (biggest first)", () => {
     const { guide } = generateGuideAndWorkouts(req());
     expect(guide.keyIssues[0].joint).toBe("right_elbow"); // 18 > 12
+  });
+
+  // ---- Sport-agnostic: coaching must NOT depend on the sport ----
+
+  it("produces identical coaching for the same mesh mismatch across different sports", () => {
+    const deltas = [delta("right_hip", 20, -20, "high"), delta("right_knee", 14, -14, "medium")];
+    const tennis = generateGuideAndWorkouts(req({ jointDeltas: deltas }, SPORT));
+    const swimming = generateGuideAndWorkouts(
+      req({ jointDeltas: deltas }, { id: "swimming", name: "Swimming", shots: ["Freestyle"], keyJoint: "right_wrist", description: "" }),
+    );
+    const custom = generateGuideAndWorkouts(
+      req({ jointDeltas: deltas }, { id: "custom", name: "Custom", shots: ["Motion"], keyJoint: "right_wrist", description: "" }),
+    );
+    // The coaching content (issues, cues, drills, muscle targets) is purely
+    // mesh-driven, so it is identical regardless of sport.
+    expect(swimming.guide.keyIssues).toEqual(tennis.guide.keyIssues);
+    expect(custom.guide.keyIssues).toEqual(tennis.guide.keyIssues);
+    expect(swimming.guide.cues).toEqual(tennis.guide.cues);
+    expect(swimming.guide.drills).toEqual(tennis.guide.drills);
+  });
+
+  it("contains no sport-specific jargon (no 'unit turn', 'serve', etc.)", () => {
+    const { guide } = generateGuideAndWorkouts(
+      req({
+        jointDeltas: [
+          delta("right_hip", 22, -22, "high"),
+          delta("trunk_rotation", 16, -16, "high"),
+          delta("right_shoulder", 12, 12, "medium"),
+        ],
+      }),
+    );
+    const text = JSON.stringify(guide).toLowerCase();
+    for (const jargon of ["unit turn", "x-factor", "serve", "forehand stroke", "kick", "pitch", "contact point", "swing plane"]) {
+      expect(text).not.toContain(jargon);
+    }
+  });
+
+  // ---- Muscle-group driven coaching + workouts ----
+
+  it("ties each flagged joint to the muscle groups that drive it", () => {
+    const { guide } = generateGuideAndWorkouts(
+      req({ jointDeltas: [delta("right_hip", 20, -20, "high"), delta("right_knee", 14, -14, "high")] }),
+    );
+    const hip = guide.keyIssues.find((i) => i.joint === "right_hip")!;
+    const knee = guide.keyIssues.find((i) => i.joint === "right_knee")!;
+    expect(hip.muscles).toBeTruthy();
+    expect(hip.muscles).toEqual(expect.arrayContaining(["glutes", "hamstrings"]));
+    expect(knee.muscles).toEqual(expect.arrayContaining(["quadriceps"]));
+    // The "driven by" line names the muscles too.
+    expect(hip.cause.toLowerCase()).toContain("glutes");
+  });
+
+  it("recommends workouts targeting the muscle groups behind the mismatch", () => {
+    const { workouts } = generateGuideAndWorkouts(
+      req({ jointDeltas: [delta("right_knee", 20, -20, "high")] }),
+    );
+    for (const w of workouts) {
+      expect(w.targetsMuscles).toBeTruthy();
+      // A knee mismatch is driven by the quadriceps and hamstrings.
+      expect(w.targetsMuscles).toEqual(expect.arrayContaining(["quadriceps"]));
+    }
+    const strength = workouts.find((w) => w.title === "Corrective strength")!;
+    // The actual strength exercise comes from the implicated muscle group.
+    expect(strength.main.some((s) => s.name === "Goblet squat")).toBe(true); // quads
+  });
+
+  it("includes a match-the-pro position hold grounded in the measured angles", () => {
+    const { workouts } = generateGuideAndWorkouts(
+      req({ jointDeltas: [delta("right_hip", 24, -24, "high")] }),
+    );
+    const flex = workouts.find((w) => w.title === "Flexibility & position-matching")!;
+    const hold = flex.main.find((s) => s.name.startsWith("Match-the-pro hold"))!;
+    expect(hold).toBeTruthy();
+    expect(hold.description).toContain("24°"); // the gap to close
+    expect(hold.description).toContain("100°"); // the pro's angle to match
   });
 
   it("builds workouts with full structure, unique ids, and targeted joints", () => {
@@ -123,8 +205,6 @@ describe("native coach engine", () => {
     const r = req({
       jointDeltas: [delta("right_elbow", 24, 24, "high")],
       phases: [
-        // The systematic bias (not the noisy mean-abs) localizes the fault: it is
-        // larger in the release phase, so that is where the fix should point.
         { name: "load", startFrame: 0, endFrame: 10, topDeltas: [delta("right_elbow", 20, 12, "high")] },
         { name: "release", startFrame: 11, endFrame: 20, topDeltas: [delta("right_elbow", 22, 24, "high")] },
       ],
@@ -160,9 +240,6 @@ describe("native coach engine", () => {
   });
 
   it("never lists a body-part group as both a key issue and a strength", () => {
-    // One side of the knee is a clear fault; the other side is well-matched.
-    // The well-matched side must NOT surface as a "knee closely matches" strength
-    // while the knee is also flagged as an issue — that would be contradictory.
     const { guide } = generateGuideAndWorkouts(
       req({
         jointDeltas: [
@@ -177,7 +254,6 @@ describe("native coach engine", () => {
       .filter((j): j is JointName => !!j)
       .map((j) => (j.endsWith("knee") ? "knee" : j));
     expect(issueGroups).toContain("knee");
-    // No strength may mention "knee" while the knee is a flagged issue.
     expect(guide.strengths.some((s) => s.toLowerCase().includes("knee"))).toBe(false);
   });
 
@@ -186,31 +262,9 @@ describe("native coach engine", () => {
       req({ jointDeltas: [delta("right_hip", 30, -24, "high")] }),
     );
     const hip = guide.keyIssues.find((i) => i.joint === "right_hip")!;
-    // proMean 100, userMean 76 → "about 24° less", NOT the 30° mean-abs delta.
     expect(hip.observation).toContain("24°");
     expect(hip.observation).toContain("less");
     expect(hip.observation).not.toContain("30°");
-  });
-
-  it("gives tennis-specific drills/cues; other sports fall back to the generic engine", () => {
-    const tennis = generateGuideAndWorkouts(
-      req({ jointDeltas: [delta("right_hip", 20, -20, "high")] }),
-    );
-    const golf = generateGuideAndWorkouts({
-      sport: { id: "golf", name: "Golf", shots: ["Full swing — iron"], keyJoint: "right_wrist", description: "" },
-      shot: "Full swing — iron",
-      numericReport: {
-        overallSimilarity: 0.7,
-        mode: "sequence",
-        jointDeltas: [delta("right_hip", 20, -20, "high")],
-        phases: [],
-      },
-    });
-    const tennisHip = tennis.guide.keyIssues[0].fix.toLowerCase();
-    const golfHip = golf.guide.keyIssues[0].fix.toLowerCase();
-    expect(tennisHip).toContain("unit turn"); // tennis-specific language
-    expect(golfHip).not.toContain("unit turn"); // generic fallback
-    expect(tennisHip).not.toBe(golfHip);
   });
 
   it("scales strengthening volume with measured severity (extra set for high-significance gaps)", () => {
@@ -223,21 +277,23 @@ describe("native coach engine", () => {
       }),
     );
     const strength = workouts.find((w) => w.title === "Corrective strength")!;
-    const hipStep = strength.main.find((s) => s.name === "Romanian deadlift")!;
-    const trunkStep = strength.main.find((s) => s.name === "Cable rotational chop")!;
-    expect(hipStep.sets).toBe(4); // high gap → +1 set over the KB's 3
-    expect(hipStep.description).toContain("24°");
-    expect(trunkStep.sets).toBe(3); // medium gap → standard dose
+    // Hamstrings (driven by the high-significance hip gap) earn an extra set.
+    const hamStep = strength.main.find((s) => s.name === "Romanian deadlift")!;
+    // Obliques (driven by the medium trunk-rotation gap) stay at the base dose.
+    const obliqueStep = strength.main.find((s) => s.name === "Cable rotational chop")!;
+    expect(hamStep.sets).toBe(4); // high gap → +1 set over the KB's 3
+    expect(hamStep.description).toContain("24°");
+    expect(obliqueStep.sets).toBe(3); // medium gap → standard dose
   });
 
-  it("grounds the strength workout's focus and skill drills in the measured gaps", () => {
+  it("grounds the strength workout's focus in the measured muscle-group gaps", () => {
     const { workouts } = generateGuideAndWorkouts(
       req({ jointDeltas: [delta("right_hip", 24, -24, "high")] }),
     );
     const strength = workouts.find((w) => w.title === "Corrective strength")!;
-    expect(strength.focus).toContain("hip (24°)");
-    const skill = workouts.find((w) => w.title === "Skill & sequencing")!;
-    expect(skill.main[0].description).toContain("24°");
+    expect(strength.focus.toLowerCase()).toContain("hip");
+    expect(strength.focus).toContain("24°");
+    expect(strength.focus.toLowerCase()).toMatch(/glutes|hamstrings/);
   });
 
   it("appends progression guidance matched to the difficulty", () => {

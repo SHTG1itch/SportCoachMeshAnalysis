@@ -1,14 +1,28 @@
+import { useState } from "react";
 import { useStore } from "../store";
-import { Trash2 } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 
 export function History() {
   const analyses = useStore((s) => s.analyses);
   const go = useStore((s) => s.go);
   const refresh = useStore((s) => s.refresh);
+  const loaded = useStore((s) => s.loaded);
+  const error = useStore((s) => s.error);
+
+  // Two-stage delete: the first click arms the row, the second confirms. Avoids
+  // a single mis-click permanently destroying an analysis that took minutes to
+  // compute and needs the original clips to reproduce.
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const del = async (id: string) => {
-    await window.app.deleteAnalysis(id);
-    await refresh();
+    try {
+      await window.app.deleteAnalysis(id);
+      await refresh();
+    } catch (e) {
+      console.error("Failed to delete analysis:", e);
+    } finally {
+      setConfirmId(null);
+    }
   };
 
   return (
@@ -18,7 +32,13 @@ export function History() {
         <p className="mt-2 text-ink-300">All runs stay on this device.</p>
       </div>
 
-      {analyses.length === 0 ? (
+      {error && (
+        <div className="card p-4 border-bad/40 text-sm text-bad bg-bad/5">{error}</div>
+      )}
+
+      {!loaded ? (
+        <div className="card p-8 text-center text-sm text-ink-400">Loading…</div>
+      ) : analyses.length === 0 ? (
         <div className="card p-8 text-center text-sm text-ink-400">
           No analyses yet.
         </div>
@@ -26,10 +46,18 @@ export function History() {
         <div className="card divide-y divide-white/5">
           {analyses.map((a) => {
             const sim = Math.round(a.report.overallSimilarity * 100);
+            const confirming = confirmId === a.id;
             return (
               <div key={a.id} className="p-4 flex items-center gap-4">
+                {a.thumbnailDataUrl && (
+                  <img
+                    src={a.thumbnailDataUrl}
+                    alt=""
+                    className="h-12 w-12 rounded-md bg-canvas-900 object-contain shrink-0 border border-white/5"
+                  />
+                )}
                 <button
-                  onClick={() => go({ name: "analysis", record: a })}
+                  onClick={() => go({ name: "analysis", record: a, from: "history" })}
                   className="flex-1 text-left"
                 >
                   <div className="text-sm font-medium text-ink-50">
@@ -40,13 +68,32 @@ export function History() {
                   </div>
                 </button>
                 <div className="text-sm tabular-nums text-ink-200">{sim}%</div>
-                <button
-                  onClick={() => del(a.id)}
-                  className="text-ink-400 hover:text-bad"
-                  title="Delete analysis"
-                >
-                  <Trash2 size={14} />
-                </button>
+                {confirming ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => del(a.id)}
+                      className="text-xs font-medium text-bad hover:underline"
+                    >
+                      Confirm delete
+                    </button>
+                    <button
+                      onClick={() => setConfirmId(null)}
+                      className="text-ink-400 hover:text-ink-100"
+                      aria-label="Cancel delete"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmId(a.id)}
+                    className="text-ink-400 hover:text-bad"
+                    aria-label={`Delete ${a.report.sport.name} ${a.shot} analysis`}
+                    title="Delete analysis"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
             );
           })}

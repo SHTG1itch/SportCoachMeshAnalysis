@@ -180,6 +180,38 @@ describe("computeAngles", () => {
     const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_rotation");
     expect(out[idx]).toBeCloseTo(90, 3);
   });
+
+  it("gates trunk features at the shared VIS_THRESHOLD (0.3), not the old 0.4 drift band", () => {
+    // A core landmark interpolated to ~0.35 visibility is "usable" everywhere
+    // else in the pipeline (fillGaps anchors at >= 0.3). The angle gate must
+    // agree, or it injects a spurious hard 0° into the unweighted DTW/similarity
+    // path for the smallest-scale trunk features.
+    const make = (vis: number) => {
+      const f = mkFrame({
+        [L.LEFT_SHOULDER]: [0.2, 1, 0],
+        [L.RIGHT_SHOULDER]: [0.4, 1.1, 0],
+        [L.LEFT_HIP]: [0, 0, 0],
+        [L.RIGHT_HIP]: [0.1, 0, 0],
+      });
+      for (const i of [L.LEFT_SHOULDER, L.RIGHT_SHOULDER, L.LEFT_HIP, L.RIGHT_HIP]) {
+        f[i].visibility = vis;
+      }
+      return f;
+    };
+    const fi = (n: string) => JOINT_FEATURES.findIndex((j) => j.name === n);
+    const trunk = [fi("trunk_rotation"), fi("trunk_lean"), fi("shoulder_line_tilt")];
+
+    const full = computeAngles(make(1));
+    expect(trunk.some((i) => Math.abs(full[i]) > 1)).toBe(true); // pose has real trunk geometry
+
+    // 0.35 >= 0.3 usable bar: trunk features preserved (the old 0.4 gate wrongly zeroed them).
+    const usable = computeAngles(make(0.35));
+    for (const i of trunk) expect(usable[i]).toBeCloseTo(full[i], 6);
+
+    // Below the usable bar they are still gated to 0.
+    const gated = computeAngles(make(0.2));
+    for (const i of trunk) expect(gated[i]).toBe(0);
+  });
 });
 
 describe("featureConfidence", () => {

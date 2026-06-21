@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
-import { Search, Trash2 } from "lucide-react";
+import { Search, Trash2, X } from "lucide-react";
 import { useStore } from "../store";
 import { WorkoutCard } from "../components/WorkoutCard";
 
 export function WorkoutsLibrary() {
   const workouts = useStore((s) => s.workouts);
   const refresh = useStore((s) => s.refresh);
+  const loaded = useStore((s) => s.loaded);
   const [query, setQuery] = useState("");
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -21,8 +23,14 @@ export function WorkoutsLibrary() {
   }, [workouts, query]);
 
   const del = async (id: string) => {
-    await window.app.deleteWorkout(id);
-    await refresh();
+    try {
+      await window.app.deleteWorkout(id);
+      await refresh();
+    } catch (e) {
+      console.error("Failed to delete workout:", e);
+    } finally {
+      setConfirmId(null);
+    }
   };
 
   return (
@@ -44,7 +52,9 @@ export function WorkoutsLibrary() {
         />
       </div>
 
-      {filtered.length === 0 ? (
+      {!loaded ? (
+        <div className="card p-8 text-center text-sm text-ink-400">Loading…</div>
+      ) : filtered.length === 0 ? (
         <div className="card p-8 text-center text-sm text-ink-400">
           {workouts.length === 0
             ? "You haven't saved any workouts yet. Run an analysis and save the ones that target what you want to work on."
@@ -54,7 +64,7 @@ export function WorkoutsLibrary() {
         <div className="grid gap-4">
           {filtered.map((w) => (
             <div key={w.id} className="relative">
-              <WorkoutCard workout={w.workout} saved onSave={() => del(w.id)} />
+              <WorkoutCard workout={w.workout} saved onSave={() => setConfirmId(w.id)} />
               <div className="absolute top-5 right-36 text-[11px] text-ink-400 flex gap-1">
                 {w.tags.map((t) => (
                   <span key={t} className="chip">
@@ -62,13 +72,32 @@ export function WorkoutsLibrary() {
                   </span>
                 ))}
               </div>
-              <button
-                onClick={() => del(w.id)}
-                className="absolute top-5 right-5 text-ink-400 hover:text-bad"
-                title="Remove from library"
-              >
-                <Trash2 size={14} />
-              </button>
+              {confirmId === w.id ? (
+                <div className="absolute top-5 right-5 flex items-center gap-2">
+                  <button
+                    onClick={() => del(w.id)}
+                    className="text-xs font-medium text-bad hover:underline"
+                  >
+                    Confirm remove
+                  </button>
+                  <button
+                    onClick={() => setConfirmId(null)}
+                    className="text-ink-400 hover:text-ink-100"
+                    aria-label="Cancel remove"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmId(w.id)}
+                  className="absolute top-5 right-5 text-ink-400 hover:text-bad"
+                  title="Remove from library"
+                  aria-label={`Remove ${w.workout.title} from library`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
           ))}
         </div>

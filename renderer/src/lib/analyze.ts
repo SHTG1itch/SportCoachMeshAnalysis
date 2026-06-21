@@ -34,6 +34,8 @@ export interface AnalyzeInput {
   proFile: File;
   userFile: File;
   proKind: "image" | "video";
+  /** Aborts the (potentially multi-minute) extraction when the user cancels. */
+  signal?: AbortSignal;
 }
 
 export async function runAnalysis(
@@ -74,6 +76,7 @@ export async function runAnalysis(
     } else {
       const result = await extractVideo(proMedia.video!, {
         targetFps: 30,
+        signal: input.signal,
         onProgress: (p: ExtractionProgress) =>
           onProgress({
             stage: "extracting_pro",
@@ -93,6 +96,7 @@ export async function runAnalysis(
     userMedia = await loadMedia(input.userFile, "video");
     const userResult = await extractVideo(userMedia.video!, {
       targetFps: 30,
+      signal: input.signal,
       onProgress: (p: ExtractionProgress) =>
         onProgress({
           stage: "extracting_user",

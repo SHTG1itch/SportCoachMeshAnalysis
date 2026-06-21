@@ -6,6 +6,7 @@ export function Home() {
   const go = useStore((s) => s.go);
   const analyses = useStore((s) => s.analyses);
   const workouts = useStore((s) => s.workouts);
+  const loaded = useStore((s) => s.loaded);
 
   return (
     <div className="space-y-10">
@@ -40,7 +41,7 @@ export function Home() {
           {SPORTS.slice(0, 8).map((s) => (
             <button
               key={s.id}
-              onClick={() => go({ name: "new" })}
+              onClick={() => go({ name: "new", sportId: s.id })}
               className="card p-4 text-left hover:border-accent-500/40 transition-colors"
             >
               <div className="text-base font-semibold text-ink-50">{s.name}</div>
@@ -56,7 +57,9 @@ export function Home() {
             <Timer size={16} className="text-accent-400" />
             <div className="h3 m-0">Recent analyses</div>
           </div>
-          {analyses.length === 0 ? (
+          {!loaded ? (
+            <div className="text-sm text-ink-400">Loading…</div>
+          ) : analyses.length === 0 ? (
             <div className="text-sm text-ink-400">
               You haven't run an analysis yet. Start one to see it here.
             </div>
@@ -65,19 +68,28 @@ export function Home() {
               {analyses.slice(0, 5).map((a) => (
                 <li key={a.id}>
                   <button
-                    onClick={() => go({ name: "analysis", record: a })}
+                    onClick={() => go({ name: "analysis", record: a, from: "home" })}
                     className="w-full flex items-center justify-between gap-3 text-left rounded-lg px-3 py-2 hover:bg-white/5"
                   >
-                    <div>
-                      <div className="text-sm font-medium text-ink-50">
-                        {a.report.sport.name} · {a.shot}
-                      </div>
-                      <div className="text-xs text-ink-400">
-                        {new Date(a.createdAt).toLocaleString()} · similarity{" "}
-                        {(a.report.overallSimilarity * 100).toFixed(0)}%
+                    <div className="flex items-center gap-3 min-w-0">
+                      {a.thumbnailDataUrl && (
+                        <img
+                          src={a.thumbnailDataUrl}
+                          alt=""
+                          className="h-10 w-10 rounded-md bg-canvas-900 object-contain shrink-0 border border-white/5"
+                        />
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-ink-50 truncate">
+                          {a.report.sport.name} · {a.shot}
+                        </div>
+                        <div className="text-xs text-ink-400">
+                          {new Date(a.createdAt).toLocaleString()} · similarity{" "}
+                          {(a.report.overallSimilarity * 100).toFixed(0)}%
+                        </div>
                       </div>
                     </div>
-                    <ArrowRight size={14} className="text-ink-400" />
+                    <ArrowRight size={14} className="text-ink-400 shrink-0" />
                   </button>
                 </li>
               ))}
@@ -90,7 +102,9 @@ export function Home() {
             <Target size={16} className="text-ok" />
             <div className="h3 m-0">Saved workouts</div>
           </div>
-          {workouts.length === 0 ? (
+          {!loaded ? (
+            <div className="text-sm text-ink-400">Loading…</div>
+          ) : workouts.length === 0 ? (
             <div className="text-sm text-ink-400">
               Workouts generated from your analyses will live here once you save them.
             </div>

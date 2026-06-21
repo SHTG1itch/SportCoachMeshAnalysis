@@ -16,19 +16,53 @@ function acceptString(accept: Props["accept"]): string {
   return "image/*,video/*";
 }
 
+function matchesAccept(file: File, accept: Props["accept"]): boolean {
+  const t = file.type;
+  if (!t) return true; // unknown MIME (some OS drag sources) — let loading decide
+  if (accept === "image") return t.startsWith("image/");
+  if (accept === "video") return t.startsWith("video/");
+  return t.startsWith("image/") || t.startsWith("video/");
+}
+
+function rejectMessage(accept: Props["accept"]): string {
+  const kind = accept === "image" ? "an image" : accept === "video" ? "a video" : "an image or video";
+  return `That file isn't ${kind}. Please choose ${kind} file.`;
+}
+
 export function MediaDrop({ label, accept, file, onChange, hint }: Props) {
   const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const previewUrl = useFileObjectUrl(file);
+
+  // Validate on BOTH drop and browse (the `accept` attribute only filters the
+  // browse dialog, not drag-drop), so an unsupported file is rejected with a
+  // clear message instead of a later opaque "failed to load".
+  const handleFile = useCallback(
+    (f: File | null) => {
+      if (!f) {
+        setError(null);
+        onChange(null);
+        return;
+      }
+      if (!matchesAccept(f, accept)) {
+        setError(rejectMessage(accept));
+        return;
+      }
+      setError(null);
+      onChange(f);
+    },
+    [accept, onChange],
+  );
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragOver(false);
       const f = e.dataTransfer.files?.[0];
-      if (f) onChange(f);
+      if (f) handleFile(f);
     },
-    [onChange],
+    [handleFile],
   );
 
   const isImage = file && file.type.startsWith("image/");
@@ -60,6 +94,7 @@ export function MediaDrop({ label, accept, file, onChange, hint }: Props) {
         {isImage && previewUrl && (
           <img
             src={previewUrl}
+            alt={`${label} reference preview`}
             className="absolute inset-0 w-full h-full object-contain bg-canvas-900"
           />
         )}
@@ -77,10 +112,11 @@ export function MediaDrop({ label, accept, file, onChange, hint }: Props) {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onChange(null);
+              handleFile(null);
             }}
             className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 hover:bg-black/80 text-ink-100 flex items-center justify-center"
             title="Remove"
+            aria-label={`Remove ${label} file`}
           >
             <X size={14} />
           </button>
@@ -92,11 +128,12 @@ export function MediaDrop({ label, accept, file, onChange, hint }: Props) {
           accept={acceptString(accept)}
           onChange={(e) => {
             const f = e.target.files?.[0] ?? null;
-            onChange(f);
+            handleFile(f);
             e.target.value = "";
           }}
         />
       </div>
+      {error && <div className="mt-2 text-xs text-bad">{error}</div>}
       {file && (
         <div className="mt-2 flex items-center gap-2 text-xs text-ink-400">
           {isImage ? <ImageIcon size={12} /> : <Film size={12} />}

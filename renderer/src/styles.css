@@ -2,6 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme palette as space-separated RGB triples consumed by tailwind.config.js.
+   The :root (default / dark) values are identical to the previous hard-coded
+   hex, so the dark theme is unchanged. `.light` overrides them for light mode. */
+:root {
+  --c-canvas-900: 7 9 14;
+  --c-canvas-800: 11 13 18;
+  --c-canvas-700: 17 20 27;
+  --c-canvas-600: 22 25 36;
+  --c-canvas-500: 31 36 49;
+  --c-ink-50: 244 246 251;
+  --c-ink-100: 229 233 242;
+  --c-ink-200: 201 207 221;
+  --c-ink-300: 154 163 183;
+  --c-ink-400: 110 118 137;
+  --c-ink-500: 78 85 102;
+  --c-accent-400: 122 182 255;
+  --c-accent-500: 74 143 253;
+  --c-accent-600: 47 111 227;
+  --c-ok: 34 195 138;
+  --c-warn: 246 180 77;
+  --c-bad: 239 95 107;
+  color-scheme: dark;
+}
+
+html.light {
+  --c-canvas-900: 246 247 250; /* page background (lightest) */
+  --c-canvas-800: 237 240 245; /* sidebar / chrome */
+  --c-canvas-700: 255 255 255; /* cards */
+  --c-canvas-600: 248 249 251; /* inputs */
+  --c-canvas-500: 203 209 219; /* scrollbar */
+  --c-ink-50: 15 18 26; /* headings (darkest text) */
+  --c-ink-100: 30 35 46;
+  --c-ink-200: 55 62 78;
+  --c-ink-300: 86 95 112;
+  --c-ink-400: 120 129 147;
+  --c-ink-500: 158 166 182;
+  --c-accent-400: 45 104 214;
+  --c-accent-500: 47 111 227;
+  --c-accent-600: 33 90 200;
+  --c-ok: 17 145 99;
+  --c-warn: 176 120 20;
+  --c-bad: 209 50 62;
+  color-scheme: light;
+}
+
 /* Window chrome drag region for frameless Electron window */
 .drag {
   -webkit-app-region: drag;
@@ -23,7 +68,41 @@
       rgba(34, 195, 138, 0.06),
       transparent 65%
     ),
-    #07090e;
+    rgb(var(--c-canvas-900));
+}
+
+/* Light-mode surface fixes: the dark theme leans on white-alpha borders/fills,
+   which are invisible on a light background, so re-tint the shared component
+   classes (and the page chrome) for light mode. */
+html.light body {
+  background: rgb(var(--c-canvas-900));
+  color: rgb(var(--c-ink-100));
+}
+html.light .bg-grain {
+  background-image:
+    radial-gradient(1200px 800px at 85% -10%, rgba(74, 143, 253, 0.1), transparent 60%),
+    radial-gradient(1000px 600px at -5% 110%, rgba(34, 195, 138, 0.08), transparent 65%),
+    rgb(var(--c-canvas-900));
+}
+html.light .card {
+  border-color: rgba(15, 18, 26, 0.1);
+  background-color: rgb(255 255 255 / 0.85);
+}
+html.light .chip {
+  border-color: rgba(15, 18, 26, 0.1);
+  background-color: rgba(15, 18, 26, 0.04);
+}
+html.light .input,
+html.light .btn-ghost {
+  border-color: rgba(15, 18, 26, 0.12);
+}
+/* The many inline `*-white/5` hovers/borders/dividers read as near-invisible on
+   light; nudge the shared ones to a dark tint so structure stays legible. */
+html.light .border-white\/5 {
+  border-color: rgba(15, 18, 26, 0.1) !important;
+}
+html.light .divide-white\/5 > * + * {
+  border-color: rgba(15, 18, 26, 0.08) !important;
 }
 
 @layer components {
@@ -68,6 +147,11 @@
   }
 }
 
+html.light,
+html.light #root {
+  background: rgb(var(--c-canvas-900));
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 10px;
@@ -77,10 +161,10 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1f2431;
+  background: rgb(var(--c-canvas-500));
   border-radius: 8px;
-  border: 2px solid #07090e;
+  border: 2px solid rgb(var(--c-canvas-900));
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #2a3043;
+  background: rgb(var(--c-ink-500));
 }

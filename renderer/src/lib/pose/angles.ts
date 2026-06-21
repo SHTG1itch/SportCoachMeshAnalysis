@@ -2,6 +2,7 @@ import type { JointName } from "@shared/types";
 import type { PoseFrame } from "./types";
 import { L } from "./types";
 import { angleBetweenDeg, sub, type Vec3 } from "./vec";
+import { VIS_THRESHOLD } from "./prepare";
 
 /** Ordered list of joint features we compute per frame. */
 export const JOINT_FEATURES: { name: JointName; label: string }[] = [
@@ -184,13 +185,18 @@ export function computeAngles(frame: PoseFrame, upSign: number = 1): number[] {
 
   // Suppress obviously-missing features. Visibility check on the two shoulders
   // and two hips — if any core landmark is invisible, zero out rotation features.
+  // Gated on the SAME VIS_THRESHOLD the rest of the pipeline treats as "usable"
+  // (fillGaps anchors / detectionCoverage / detectUpSign): a previous hard-coded
+  // 0.4 here left a 0.30–0.39 drift band where a frame had valid interpolated
+  // torso geometry yet still got hard-zeroed, injecting a spurious 0° into the
+  // unweighted DTW/similarity path for the smallest-scale trunk features.
   const viz = [
     frame[L.LEFT_SHOULDER].visibility,
     frame[L.RIGHT_SHOULDER].visibility,
     frame[L.LEFT_HIP].visibility,
     frame[L.RIGHT_HIP].visibility,
   ];
-  if (viz.some((v) => v < 0.4)) {
+  if (viz.some((v) => v < VIS_THRESHOLD)) {
     out[10] = 0;
     out[11] = 0;
     out[12] = 0;

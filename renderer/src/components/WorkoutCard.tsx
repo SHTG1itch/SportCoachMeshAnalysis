@@ -47,15 +47,27 @@ export function WorkoutCard({ workout, saved, onSave }: Props) {
         </button>
       </div>
 
-      {workout.targetsJoints.length > 0 && (
+      {workout.targetsMuscles && workout.targetsMuscles.length > 0 ? (
         <div className="mt-3 flex items-center gap-2 flex-wrap">
           <Target size={12} className="text-ink-400" />
-          {workout.targetsJoints.map((j) => (
-            <span key={j} className="chip">
-              {j.replace(/_/g, " ")}
+          <span className="text-xs text-ink-400">Muscles:</span>
+          {workout.targetsMuscles.map((m) => (
+            <span key={m} className="chip">
+              {m.replace(/_/g, " ")}
             </span>
           ))}
         </div>
+      ) : (
+        workout.targetsJoints.length > 0 && (
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <Target size={12} className="text-ink-400" />
+            {workout.targetsJoints.map((j) => (
+              <span key={j} className="chip">
+                {j.replace(/_/g, " ")}
+              </span>
+            ))}
+          </div>
+        )
       )}
 
       <button

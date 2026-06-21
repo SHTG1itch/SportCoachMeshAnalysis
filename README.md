@@ -9,10 +9,12 @@ guide plus saveable workout plans that target the specific differences.
 
 1. **3D pose extraction** (per frame) — MediaPipe BlazePose GHUM (heavy model),
    33 world landmarks in meters. Inference runs locally in the Electron renderer
-   via WebAssembly, with GPU delegate when available. The MediaPipe WASM runtime
-   and the pose model are fetched once from public CDNs (jsDelivr and Google
-   storage) on first use and then cached; this is the app's only network access
-   (see "Network use" below).
+   via WebAssembly, on the GPU delegate when a usable WebGL context is available
+   and automatically falling back to the CPU delegate otherwise (so the pipeline
+   runs everywhere, just slower). The MediaPipe WASM runtime and the pose model
+   are fetched once from public CDNs (jsDelivr and Google storage) on first use
+   and then cached; this is the app's only network access (see "Network use"
+   below).
 2. **Signal cleanup** — before any geometry: (a) missing/occluded landmarks
    (including all-zero frames from detection dropouts) are repaired by
    per-landmark temporal interpolation so they can't inject phantom "fully
@@ -59,19 +61,32 @@ guide plus saveable workout plans that target the specific differences.
    pose-detection coverage surfaced as a confidence caveat. (`trunk_lean` is
    measured against a data-derived "up" direction, so it is correct under
    MediaPipe's y-DOWN world-coordinate convention.)
-9. **Coaching guide and workouts** — a built-in biomechanics engine turns the
-   numeric report into a structured guide (summary, strengths, key issues tied
-   to joints, drills, mental cues) and three warm-up / main / cool-down
-   workouts targeting the most significant deltas. Issues are collapsed to one
-   per body-part group (the worse side) so left/right of the same joint don't
-   surface as separate, contradictory items, and tennis gets a stroke-specific
-   overlay (unit turn, X-factor, hip load, contact-point extension) on top of
-   the generic engine. It runs natively on-device
-   with **no API key and no network call** — every statement is generated
-   deterministically from the actual joint-delta numbers (direction-aware via
-   the signed bias, sport-aware, and phase-aware), so it never hallucinates
-   angles that aren't in the data.
-10. **Persistence** — analyses, generated workouts, and settings are stored in a
+9. **Coaching guide and workouts — sport-agnostic, mesh-mismatch driven.** A
+   built-in biomechanics engine turns the numeric report into a structured guide
+   and three workouts, grounded **entirely in the skeletal-mesh difference**
+   between you and the pro — it contains NO sport-specific knowledge, so it works
+   for every possible sport (and the "custom" sport for anything else). For each
+   mismatched joint it states the measured difference ("your right elbow is bent
+   118° where the pro's is 100° — about 18° more") and the physical change that
+   matches the pro's mesh ("to match the pro, straighten your arm more fully
+   through this position"). Each joint is mapped to the **muscle groups that
+   govern it**, and the three workouts (mobility & activation, corrective
+   strength, flexibility & position-matching) are built from the muscle groups
+   behind your biggest mismatches — ranked by gap, with an extra strength set for
+   the muscles driving a high-significance difference, plus "match-the-pro"
+   position holds set to the pro's exact angles. Issues are collapsed to one per
+   body-part group (the worse side) so left/right of the same joint don't surface
+   as separate, contradictory items. It runs natively on-device with **no API key
+   and no network call** — every statement is generated deterministically from
+   the actual joint-delta numbers (direction-aware via the signed bias and
+   phase-aware), so it never hallucinates angles that aren't in the data.
+10. **Visual skeleton comparison** — the extracted 3D skeletons are persisted
+   (downsampled and time-aligned) and shown on the result screen as a scrubbable
+   side-by-side pro-vs-you mesh, defaulting to the contact/release moment. The
+   user's key pose is also rendered as the history/home thumbnail. Projection
+   auto-orients head-up from the data, so it is correct under MediaPipe's y-DOWN
+   world coordinates.
+11. **Persistence** — analyses, generated workouts, and settings are stored in a
    local SQLite DB under the Electron user-data directory. Your media, poses, and
    results never leave your machine — the analysis and the coaching guide run
    entirely on-device. The only data the app fetches over the network is the
@@ -103,7 +118,7 @@ and the built `dist/` in prod.
 ```bash
 npm run build     # typecheck + vite build + electron tsc
 npm run start     # runs Electron against the built bundle
-npm run test      # vitest — 68 tests for vec / angles / dtw / normalize / prepare / handedness / compare / coach
+npm run test      # vitest — 116 unit tests across vec / angles / dtw / normalize / prepare / handedness / landmarker / render / compare / coach (plus 6 gated real-footage evals, skipped by default)
 npm run typecheck # tsc --noEmit for both tsconfigs
 ```
 
@@ -153,9 +168,12 @@ and number-driven rather than free-form.
     (incl. a regression proving a low-visibility deviant segment cannot
     fabricate a coaching fault), the compare() orchestration (incl. a
     lefty-vs-righty end-to-end match), and the native coaching engine
-    (group-deduped, direction-aware, number-grounded, severity-dosed,
-    tennis-specific guide + workouts) are all unit-tested (90 passing Vitest
-    tests).
+    (group-deduped, direction-aware, number-grounded, severity-dosed, and
+    **sport-agnostic** — verified to emit identical mesh-mismatch coaching across
+    sports with no sport jargon, and to drive workouts off the muscle groups
+    behind each mismatch) plus the skeleton-projection math (head-up
+    auto-orientation under y-DOWN coords) are all unit-tested (116 passing
+    Vitest tests).
   - Renderer + Electron both typecheck clean; renderer builds clean through
     Vite.
   - The real analysis engine was validated on actual tennis footage (an amateur
@@ -196,11 +214,13 @@ renderer/src/
       handedness.ts             dominant-side detection + angle mirroring
       phases.ts                 velocity-peak phase detection
       dtw.ts                    DTW with Sakoe–Chiba band
-      compare.ts                report builder
-      landmarker.ts             MediaPipe wrapper + video frame extractor
+      compare.ts                report builder (+ persisted skeleton mesh)
+      landmarker.ts             MediaPipe wrapper (GPU→CPU fallback) + extractor
+      render.ts                 pure skeleton projection + canvas drawing
       *.test.ts                 unit tests
     sports.ts                   sport metadata registry
   components/                   Sidebar, TopBar, MediaDrop, PoseOverlay,
+                                MeshCompare (scrubbable pro-vs-you skeletons),
                                 DeltaChart, JointBreakdown, GuideView,
                                 WorkoutCard
   screens/                      Home, NewAnalysis, AnalysisResult,

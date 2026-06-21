@@ -3,10 +3,12 @@ import type {
   Handedness,
   JointDelta,
   JointName,
+  MeshComparison,
+  MeshPose,
   PhaseSummary,
   SportMeta,
 } from "@shared/types";
-import type { PoseFrame } from "./types";
+import type { Landmark3D, PoseFrame } from "./types";
 import {
   JOINT_FEATURES,
   computeAnglesSequence,
@@ -320,9 +322,80 @@ function buildDelta(
   };
 }
 
+/** Max (pro, you) skeleton pairs persisted for the visual mesh comparison. The
+ * scrubber doesn't need every aligned frame; ~40 keeps the record small while
+ * still showing the whole motion smoothly. */
+const MAX_MESH_PAIRS = 40;
+
+/** Round a landmark for compact persistence (sub-mm precision is irrelevant for
+ * a screen-space skeleton, and full doubles would bloat every saved record). */
+function roundLm(l: Landmark3D): { x: number; y: number; z: number; visibility: number } {
+  return {
+    x: +l.x.toFixed(4),
+    y: +l.y.toFixed(4),
+    z: +l.z.toFixed(4),
+    visibility: +(l.visibility ?? 1).toFixed(2),
+  };
+}
+function roundPose(f: PoseFrame): MeshPose {
+  return f.map(roundLm);
+}
+
+/**
+ * Build the persisted skeleton data the result screen renders. The landmarks are
+ * already extracted for the comparison; without this they'd be discarded and the
+ * user would never see the mesh the app is named for. We store a downsampled,
+ * time-aligned set of (pro, you) pose pairs — sampled along the DTW path so each
+ * scrubber position shows MATCHED poses — plus the contact/release index as the
+ * default view + thumbnail frame.
+ */
+function buildMesh(
+  mode: "sequence" | "single_frame",
+  proFrames: PoseFrame[],
+  userFrames: PoseFrame[],
+  path: [number, number][],
+  keyUserFrame: number | null,
+  phases: PhaseSummary[],
+): MeshComparison | null {
+  if (mode === "single_frame") {
+    if (proFrames.length === 0 || userFrames.length === 0) return null;
+    const u = keyUserFrame ?? 0;
+    return {
+      pairs: [{ pro: roundPose(proFrames[0]), user: roundPose(userFrames[u] ?? userFrames[0]) }],
+      keyIndex: 0,
+    };
+  }
+  if (path.length === 0) return null;
+  const count = Math.min(MAX_MESH_PAIRS, path.length);
+  const sampled: number[] = [];
+  for (let s = 0; s < count; s++) {
+    sampled.push(count === 1 ? 0 : Math.round((s * (path.length - 1)) / (count - 1)));
+  }
+  const pairs = sampled.map((pi) => {
+    const [i, j] = path[pi];
+    return { pro: roundPose(proFrames[i]), user: roundPose(userFrames[j]) };
+  });
+  // Default the scrubber to the contact/release moment (or the load phase) so the
+  // user lands on the most coaching-relevant pose; fall back to the middle.
+  const anchor = phases.find((p) => p.name === "release") ?? phases.find((p) => p.name === "load");
+  let keyIndex = Math.floor(pairs.length / 2);
+  if (anchor) {
+    const mid = (anchor.startFrame + anchor.endFrame) / 2;
+    let best = Infinity;
+    sampled.forEach((pi, k) => {
+      const d = Math.abs(path[pi][0] - mid);
+      if (d < best) {
+        best = d;
+        keyIndex = k;
+      }
+    });
+  }
+  return { pairs, keyIndex };
+}
+
 /**
  * Compare two pose sequences and produce an AnalysisReport.
- * Guide + workouts are left null/empty here — that's the LLM's job.
+ * Guide + workouts are left null/empty here — that's the coach engine's job.
  */
 export function compare(input: CompareInput): AnalysisReport {
   const { sport, shot } = input;
@@ -511,6 +584,8 @@ export function compare(input: CompareInput): AnalysisReport {
           Math.min(1, similarity.reduce((a, b) => a + b, 0) / similarity.length),
         );
 
+  const mesh = buildMesh(mode, proFrames, userFrames, path, keyUserFrame, phases);
+
   return {
     version: 1,
     sport,
@@ -532,6 +607,7 @@ export function compare(input: CompareInput): AnalysisReport {
     overallSimilarity: +overall.toFixed(3),
     jointDeltas: sortedByImpact(jointDeltas),
     phases,
+    mesh,
     guide: null,
     workouts: [],
   };

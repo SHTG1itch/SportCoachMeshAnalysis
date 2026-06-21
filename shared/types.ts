@@ -66,6 +66,29 @@ export interface PhaseSummary {
   note?: string;
 }
 
+/** One landmark of a stored skeleton (structurally identical to the renderer's
+ * Landmark3D, kept dependency-free here). Coordinates are hip-centered,
+ * torso-normalized world coords; the renderer auto-orients head-up. */
+export interface MeshLandmark {
+  x: number;
+  y: number;
+  z: number;
+  visibility: number;
+}
+
+export type MeshPose = MeshLandmark[];
+
+/** Compact, persisted skeleton data so the analysis result can SHOW the mesh the
+ * app is built around (otherwise the landmarks are computed and thrown away).
+ * A downsampled set of time-aligned (pro, you) pose pairs for a scrubbable
+ * side-by-side comparison. */
+export interface MeshComparison {
+  pairs: { pro: MeshPose; user: MeshPose }[];
+  /** Index into `pairs` of the contact/release moment — the default scrub
+   * position and the frame used for the history thumbnail. */
+  keyIndex: number;
+}
+
 export interface AnalysisReport {
   version: 1;
   sport: SportMeta;
@@ -105,7 +128,14 @@ export interface AnalysisReport {
   overallSimilarity: number; // 0..1
   jointDeltas: JointDelta[];
   phases: PhaseSummary[];
-  /** LLM-authored content derived from the numeric report. */
+  /**
+   * Downsampled, time-aligned skeletons for the visual mesh comparison on the
+   * result screen. Optional for backward compatibility with records saved before
+   * the mesh view existed (those simply render no skeleton).
+   */
+  mesh?: MeshComparison | null;
+  /** Coaching content computed deterministically on-device from the numeric
+   * report by the built-in biomechanics engine (no LLM, no API key, no network). */
   guide: ImprovementGuide | null;
   workouts: Workout[];
 }
@@ -119,6 +149,10 @@ export interface ImprovementGuide {
     observation: string;
     cause: string;
     fix: string;
+    /** Muscle groups that drive this joint's position and that the workouts
+     * target to close the mismatch. Optional for backward compatibility with
+     * guides generated before the muscle-group model. */
+    muscles?: string[];
   }[];
   drills: string[]; // names only; full workouts live in `workouts`
   cues: string[]; // in-the-moment mental cues
@@ -135,6 +169,9 @@ export interface Workout {
   main: WorkoutStep[];
   cooldown: WorkoutStep[];
   targetsJoints: JointName[];
+  /** Muscle groups this workout trains — derived from the joints that mismatch
+   * the pro. Optional for backward compatibility. */
+  targetsMuscles?: string[];
   notes?: string;
 }
 

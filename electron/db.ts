@@ -73,12 +73,20 @@ export function saveAnalysis(r: AnalysisRecord): void {
   });
 }
 
+/** Upper bound on rows returned to the renderer in one list call. Each record
+ * embeds a full AnalysisReport (DTW path + similarity timeline can be hundreds of
+ * KB), and the store re-reads the list on every mutation, so an unbounded SELECT
+ * would make a long-lived install slower and slower. 500 newest is far more than
+ * any real user browses while keeping memory and parse cost bounded. */
+const LIST_LIMIT = 500;
+
 export function listAnalyses(): AnalysisRecord[] {
   const d = requireDb();
   const rows = d
     .prepare(
       `SELECT id, created_at as createdAt, sport_id as sportId, shot,
-              thumbnail, payload FROM analyses ORDER BY created_at DESC`,
+              thumbnail, payload FROM analyses ORDER BY created_at DESC
+       LIMIT ${LIST_LIMIT}`,
     )
     .all() as {
     id: string;
@@ -88,14 +96,26 @@ export function listAnalyses(): AnalysisRecord[] {
     thumbnail: string | null;
     payload: string;
   }[];
-  return rows.map((row) => ({
-    id: row.id,
-    createdAt: row.createdAt,
-    sportId: row.sportId as AnalysisRecord["sportId"],
-    shot: row.shot,
-    thumbnailDataUrl: row.thumbnail ?? undefined,
-    report: JSON.parse(row.payload),
-  }));
+  // Guard each row's JSON.parse individually: a single corrupt / schema-
+  // incompatible payload (manual DB edit, a record from an incompatible version)
+  // must NOT throw and take down the entire History / Home / library view. Skip
+  // and warn instead, so the rest of the user's data still loads.
+  const out: AnalysisRecord[] = [];
+  for (const row of rows) {
+    try {
+      out.push({
+        id: row.id,
+        createdAt: row.createdAt,
+        sportId: row.sportId as AnalysisRecord["sportId"],
+        shot: row.shot,
+        thumbnailDataUrl: row.thumbnail ?? undefined,
+        report: JSON.parse(row.payload),
+      });
+    } catch (e) {
+      console.warn(`Skipping unreadable analysis row ${row.id}:`, e);
+    }
+  }
+  return out;
 }
 
 export function getAnalysis(id: string): AnalysisRecord | null {
@@ -151,7 +171,8 @@ export function listWorkouts(): SavedWorkout[] {
   const rows = requireDb()
     .prepare(
       `SELECT id, saved_at as savedAt, analysis_id as analysisId,
-              tags, payload FROM workouts ORDER BY saved_at DESC`,
+              tags, payload FROM workouts ORDER BY saved_at DESC
+       LIMIT ${LIST_LIMIT}`,
     )
     .all() as {
     id: string;
@@ -160,13 +181,23 @@ export function listWorkouts(): SavedWorkout[] {
     tags: string;
     payload: string;
   }[];
-  return rows.map((row) => ({
-    id: row.id,
-    savedAt: row.savedAt,
-    analysisId: row.analysisId ?? undefined,
-    tags: JSON.parse(row.tags),
-    workout: JSON.parse(row.payload),
-  }));
+  // Per-row guard (see listAnalyses): one corrupt workout row must not blank the
+  // whole library.
+  const out: SavedWorkout[] = [];
+  for (const row of rows) {
+    try {
+      out.push({
+        id: row.id,
+        savedAt: row.savedAt,
+        analysisId: row.analysisId ?? undefined,
+        tags: JSON.parse(row.tags),
+        workout: JSON.parse(row.payload),
+      });
+    } catch (e) {
+      console.warn(`Skipping unreadable workout row ${row.id}:`, e);
+    }
+  }
+  return out;
 }
 
 export function deleteWorkout(id: string): void {

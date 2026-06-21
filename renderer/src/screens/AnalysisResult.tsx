@@ -7,17 +7,27 @@ import { DeltaChart } from "../components/DeltaChart";
 import { JointBreakdown } from "../components/JointBreakdown";
 import { GuideView } from "../components/GuideView";
 import { WorkoutCard } from "../components/WorkoutCard";
+import { MeshCompare } from "../components/MeshCompare";
 import { useStore } from "../store";
 
-export function AnalysisResult({ record }: { record: AnalysisRecord }) {
+type TabId = "summary" | "skeleton" | "joints" | "guide" | "workouts";
+
+export function AnalysisResult({
+  record,
+  backTo = "home",
+}: {
+  record: AnalysisRecord;
+  backTo?: "home" | "history";
+}) {
   const go = useStore((s) => s.go);
   const refresh = useStore((s) => s.refresh);
   const savedWorkouts = useStore((s) => s.workouts);
 
   const [current, setCurrent] = useState<AnalysisRecord>(record);
-  const [tab, setTab] = useState<"summary" | "joints" | "guide" | "workouts">("summary");
+  const [tab, setTab] = useState<TabId>("summary");
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { report } = current;
 
@@ -69,9 +79,14 @@ export function AnalysisResult({ record }: { record: AnalysisRecord }) {
   };
 
   const onDelete = async () => {
-    await window.app.deleteAnalysis(current.id);
-    await refresh();
-    go({ name: "history" });
+    try {
+      await window.app.deleteAnalysis(current.id);
+      await refresh();
+      go({ name: "history" });
+    } catch (e) {
+      console.error("Failed to delete analysis:", e);
+      setConfirmDelete(false);
+    }
   };
 
   const sim = report.overallSimilarity;
@@ -86,19 +101,33 @@ export function AnalysisResult({ record }: { record: AnalysisRecord }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <button
-          onClick={() => go({ name: "home" })}
+          onClick={() => go({ name: backTo })}
           className="btn-subtle"
         >
-          <ArrowLeft size={14} /> Back
+          <ArrowLeft size={14} /> Back to {backTo === "history" ? "history" : "home"}
         </button>
         <div className="flex items-center gap-2">
           <button onClick={regen} className="btn-ghost" disabled={regenerating}>
             <RefreshCw size={14} className={regenerating ? "animate-spin" : undefined} />
             {regenerating ? "Regenerating…" : "Regenerate guide"}
           </button>
-          <button onClick={onDelete} className="btn-subtle text-bad hover:text-bad">
-            <Trash2 size={14} /> Delete
-          </button>
+          {confirmDelete ? (
+            <>
+              <button onClick={onDelete} className="btn-subtle text-bad hover:text-bad">
+                <Trash2 size={14} /> Confirm delete
+              </button>
+              <button onClick={() => setConfirmDelete(false)} className="btn-subtle">
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="btn-subtle text-bad hover:text-bad"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
         </div>
       </div>
 
@@ -143,9 +172,12 @@ export function AnalysisResult({ record }: { record: AnalysisRecord }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-white/5">
+      <div className="flex items-center gap-2 border-b border-white/5" role="tablist" aria-label="Analysis sections">
         <Tab id="summary" tab={tab} setTab={setTab}>
           Summary
+        </Tab>
+        <Tab id="skeleton" tab={tab} setTab={setTab}>
+          Skeleton
         </Tab>
         <Tab id="joints" tab={tab} setTab={setTab}>
           Joint breakdown
@@ -198,6 +230,19 @@ export function AnalysisResult({ record }: { record: AnalysisRecord }) {
             <JointBreakdown deltas={report.jointDeltas.slice(0, 5)} />
           </div>
         </div>
+      )}
+
+      {tab === "skeleton" && (
+        <>
+          {report.mesh && report.mesh.pairs.length > 0 ? (
+            <MeshCompare mesh={report.mesh} />
+          ) : (
+            <div className="card p-8 text-center text-sm text-ink-400">
+              No skeleton was captured for this analysis. Re-run the analysis to
+              see the reconstructed pose comparison.
+            </div>
+          )}
+        </>
       )}
 
       {tab === "joints" && (
@@ -264,17 +309,20 @@ function Tab({
   setTab,
   children,
 }: {
-  id: "summary" | "joints" | "guide" | "workouts";
-  tab: string;
-  setTab: (t: "summary" | "joints" | "guide" | "workouts") => void;
+  id: TabId;
+  tab: TabId;
+  setTab: (t: TabId) => void;
   children: React.ReactNode;
 }) {
+  const selected = tab === id;
   return (
     <button
+      role="tab"
+      aria-selected={selected}
       onClick={() => setTab(id)}
       className={clsx(
         "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
-        tab === id
+        selected
           ? "border-accent-500 text-ink-50"
           : "border-transparent text-ink-400 hover:text-ink-100",
       )}

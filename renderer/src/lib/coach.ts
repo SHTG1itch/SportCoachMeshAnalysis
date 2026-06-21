@@ -1,11 +1,15 @@
-// Native, offline coaching engine.
+// Native, offline coaching engine — SPORT-AGNOSTIC.
 //
-// Turns the numeric technique-comparison report into an ImprovementGuide and a
-// set of Workouts WITHOUT any API key or network call. Every statement is
-// grounded in the actual joint-delta numbers, so the output is deterministic
-// and never hallucinates angles that aren't in the data.
+// The coaching is grounded entirely in the skeletal-mesh mismatch between the
+// user and the professional: for each joint, how the user's measured angle
+// differs from the pro's and which physical change closes that gap. It contains
+// NO sport-specific knowledge, so it works for every possible sport (and the
+// "custom" sport for anything not in the registry). The recommended workouts are
+// built from the MUSCLE GROUPS that govern each mismatched joint, so training
+// targets the muscles that could be causing the difference.
 //
-// Pure functions, no runtime deps.
+// Every statement is derived deterministically from the actual joint-delta
+// numbers — no API key, no network call, no hallucinated angles.
 
 import type {
   GuideRequest,
@@ -20,24 +24,6 @@ import type {
 
 type Dir = "more" | "less";
 
-interface DirText {
-  observation: string; // completed with the numeric clause by the caller
-  cause: string;
-  fix: string;
-  cue: string;
-}
-
-interface JointKnowledge {
-  /** Short body-part phrase, e.g. "elbow", "trunk rotation". */
-  group: string;
-  more: DirText; // user value HIGHER than pro (signedBias > 0)
-  less: DirText; // user value LOWER than pro (signedBias < 0)
-  drill: string;
-  mobilize: WorkoutStep;
-  strengthen: WorkoutStep;
-  stretch: WorkoutStep;
-}
-
 /** Normalize a joint name to its body-part key (strip left_/right_). */
 function jointKey(joint: JointName): string {
   if (joint.endsWith("elbow")) return "elbow";
@@ -48,289 +34,324 @@ function jointKey(joint: JointName): string {
   return joint; // trunk_rotation, trunk_lean, shoulder_line_tilt
 }
 
-const KB: Record<string, JointKnowledge> = {
+// ---------------------------------------------------------------------------
+// Joint mechanics — universal, mesh-matching coaching per joint group.
+//
+// `observation` describes WHAT differs from the pro (the mesh mismatch).
+// `correction` says HOW to change your body to MATCH the pro's mesh — a pure
+// physical instruction with no sport concepts. `cue` is a short in-the-moment
+// reminder. `drill` is a universal "match the pro" rehearsal. None of this
+// references any sport.
+// ---------------------------------------------------------------------------
+
+interface DirText {
+  observation: string; // completed with the numeric clause by the caller
+  correction: string;
+  cue: string;
+}
+
+interface JointMechanics {
+  /** Short body-part phrase, e.g. "elbow", "trunk rotation". */
+  group: string;
+  /** Plain-language name of the movement this angle measures. */
+  movement: string;
+  more: DirText; // user angle HIGHER than pro (signedBias > 0)
+  less: DirText; // user angle LOWER than pro (signedBias < 0)
+  /** A universal, sport-agnostic rehearsal for matching the pro at this joint. */
+  drill: string;
+  /** Muscle groups (keys into MUSCLES) that govern this joint's position, most
+   * responsible first. The workouts are built from these. */
+  muscles: string[];
+}
+
+const MECHANICS: Record<string, JointMechanics> = {
   elbow: {
     group: "elbow",
+    movement: "how much the elbow is bent",
     more: {
-      observation: "your elbow stays more bent through the motion",
-      cause: "an over-flexed elbow shortens the lever and leaks power before release",
-      fix: "extend the arm later and more fully so the forearm whips through contact",
-      cue: "long arm at contact",
+      observation: "your elbow stays more bent than the pro's",
+      correction: "straighten your arm more fully through this position to match the pro",
+      cue: "longer arm to match the pro",
     },
     less: {
       observation: "your elbow is straighter than the pro's",
-      cause: "an over-extended elbow removes the elastic load the forearm needs to accelerate",
-      fix: "keep a soft bend through the load phase, then snap to extension at contact",
-      cue: "soft load, snap late",
+      correction: "keep a softer bend in the arm to match the pro's elbow angle",
+      cue: "softer elbow to match the pro",
     },
-    drill: "Band-resisted elbow extension snaps",
-    mobilize: { name: "Arm circles + elbow CARs", durationSec: 60, description: "Controlled rotations to prime the elbow and shoulder.", cues: ["full range", "slow"] },
-    strengthen: { name: "Cable triceps extension", sets: 3, reps: "10-12", description: "Drive full elbow extension under control.", cues: ["lock out", "controlled return"] },
-    stretch: { name: "Overhead triceps stretch", durationSec: 40, description: "Lengthen the triceps and elbow flexors.", cues: ["relax", "breathe"] },
+    drill: "Slow-motion reps freezing the elbow at the pro's angle, filmed side-on to compare",
+    muscles: ["triceps", "biceps"],
   },
   shoulder: {
     group: "shoulder",
+    movement: "how far the upper arm is raised away from the torso",
     more: {
-      observation: "your arm is carried more abducted (further from the torso)",
-      cause: "excess abduction puts the shoulder in a weaker, injury-prone position and disconnects it from trunk drive",
-      fix: "keep the upper arm closer to the body so trunk rotation drives the arm",
-      cue: "elbow tighter to ribs",
+      observation: "your arm is carried further from your torso than the pro's",
+      correction: "bring your upper arm closer to your body to match the pro",
+      cue: "arm in closer to match",
     },
     less: {
-      observation: "your arm stays closer to the torso than the pro's",
-      cause: "too little abduction reduces the swing arc and the range available to generate speed",
-      fix: "create more separation between arm and torso during the load to lengthen the arc",
-      cue: "make a bigger arc",
+      observation: "your arm stays closer to your torso than the pro's",
+      correction: "create more space between your arm and torso to match the pro's arm position",
+      cue: "more arm separation to match",
     },
-    drill: "Wall slides with scapular control",
-    mobilize: { name: "Band shoulder dislocates", durationSec: 60, description: "Pass a band overhead and back to open the shoulders.", cues: ["straight arms", "smooth"] },
-    strengthen: { name: "Landmine press", sets: 3, reps: "8-10", description: "Build stable overhead pressing strength.", cues: ["ribs down", "full press"] },
-    stretch: { name: "Doorway pec stretch", durationSec: 40, description: "Open the chest and front of the shoulder.", cues: ["gentle", "breathe"] },
+    drill: "Mirror or filmed arm-position holds matching the pro's shoulder angle",
+    muscles: ["deltoids", "lats", "rotator_cuff"],
   },
   hip: {
     group: "hip",
+    movement: "how much you fold/hinge at the hips",
     more: {
-      observation: "you sit into more hip flexion (more hinge/squat)",
-      cause: "excess hip flexion can collapse posture and shift load off the kinetic chain",
-      fix: "stand a touch taller through the hips while keeping athletic tension",
-      cue: "tall hips, soft knees",
+      observation: "you fold more at the hips than the pro",
+      correction: "stand a touch taller at the hips to match the pro's posture",
+      cue: "taller hips to match",
     },
     less: {
-      observation: "your hips are more extended/upright than the pro's",
-      cause: "too little hip hinge limits the load you can store in the glutes and hamstrings",
-      fix: "hinge deeper to load the hips before you drive",
-      cue: "load the hips first",
+      observation: "your hips are more open/upright than the pro's",
+      correction: "hinge deeper at the hips to match the pro's loaded position",
+      cue: "hinge more to match",
     },
-    drill: "Hip-hinge to vertical jump",
-    mobilize: { name: "90/90 hip switches", durationSec: 60, description: "Rotate between hip positions to free the joint.", cues: ["control", "tall chest"] },
-    strengthen: { name: "Romanian deadlift", sets: 3, reps: "8-10", description: "Train the hip hinge and posterior chain.", cues: ["push hips back", "flat back"] },
-    stretch: { name: "Couch stretch", durationSec: 45, description: "Open the hip flexors of each leg.", cues: ["squeeze glute", "tall"] },
+    drill: "Hip-hinge holds set to the pro's hip angle, filmed and compared",
+    muscles: ["glutes", "hamstrings", "hip_flexors"],
   },
   knee: {
     group: "knee",
+    movement: "how much the knee is bent",
     more: {
-      observation: "your knee stays more bent",
-      cause: "over-flexed knees can mean you're sitting in the load too long and losing drive timing",
-      fix: "use the bend to spring — extend explosively rather than dwelling in the squat",
-      cue: "bend then explode",
+      observation: "your knee stays more bent than the pro's",
+      correction: "straighten the knee a little to match the pro",
+      cue: "less knee bend to match",
     },
     less: {
       observation: "your knee is straighter than the pro's",
-      cause: "stiff, straight knees skip the elastic load that powers the legs",
-      fix: "add an athletic knee bend during the load phase",
-      cue: "athletic knee bend",
+      correction: "add more knee bend to match the pro's loaded position",
+      cue: "more knee bend to match",
     },
-    drill: "Countermovement jumps",
+    drill: "Loaded knee-bend holds set to the pro's knee angle",
+    muscles: ["quadriceps", "hamstrings"],
+  },
+  ankle: {
+    group: "ankle",
+    movement: "how much the ankle is flexed",
+    more: {
+      observation: "your ankle is more flexed (shin further over the toes) than the pro's",
+      correction: "let the shin sit back a little so the ankle angle matches the pro",
+      cue: "ease the ankle to match",
+    },
+    less: {
+      observation: "your ankle is stiffer/less flexed than the pro's",
+      correction: "allow more ankle flex so the angle matches the pro",
+      cue: "more ankle flex to match",
+    },
+    drill: "Controlled ankle-position holds matching the pro's angle",
+    muscles: ["calves", "tibialis"],
+  },
+  trunk_rotation: {
+    group: "trunk rotation",
+    movement: "how far your shoulders rotate relative to your hips",
+    more: {
+      observation: "you rotate your shoulders further from your hips than the pro (more separation)",
+      correction: "rotate your shoulders a little less relative to your hips to match the pro",
+      cue: "less shoulder-hip separation to match",
+    },
+    less: {
+      observation: "you create less shoulder-to-hip rotation than the pro",
+      correction: "rotate your shoulders further against your hips to match the pro's separation",
+      cue: "more shoulder turn to match",
+    },
+    drill: "Rotation holds matching the pro's shoulder-vs-hip angle, filmed from behind",
+    muscles: ["obliques", "core"],
+  },
+  trunk_lean: {
+    group: "trunk lean",
+    movement: "how far your torso leans from vertical",
+    more: {
+      observation: "your torso leans further from vertical than the pro's",
+      correction: "bring your torso more upright to match the pro's posture",
+      cue: "stack taller to match",
+    },
+    less: {
+      observation: "your torso stays more upright than the pro's",
+      correction: "lean your torso a little more from vertical to match the pro's angle",
+      cue: "match the pro's lean",
+    },
+    drill: "Posture holds set to the pro's torso angle, filmed side-on",
+    muscles: ["core", "erector_spinae", "hip_flexors"],
+  },
+  shoulder_line_tilt: {
+    group: "shoulder line tilt",
+    movement: "how tilted your shoulder line is (one shoulder higher than the other)",
+    more: {
+      observation: "your shoulders are more tilted (one higher than the other) than the pro's",
+      correction: "level your shoulders more to match the pro",
+      cue: "level the shoulders to match",
+    },
+    less: {
+      observation: "your shoulder line stays flatter/more level than the pro's",
+      correction: "let your shoulder line tilt a little more to match the pro's angle",
+      cue: "match the pro's tilt",
+    },
+    drill: "Filmed shoulder-line holds matching the pro's tilt",
+    muscles: ["obliques", "core"],
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Muscle groups — what the workouts actually train.
+//
+// Each muscle group carries a mobilize / strengthen / stretch step, so a
+// mismatch can be addressed whether it is driven by tightness (limited range) or
+// weakness (can't produce/control the position). The workout builder selects
+// muscle groups from the mismatched joints (JointMechanics.muscles).
+// ---------------------------------------------------------------------------
+
+interface MuscleKnowledge {
+  /** Friendly display label, e.g. "glutes & hips". */
+  label: string;
+  mobilize: WorkoutStep;
+  strengthen: WorkoutStep;
+  stretch: WorkoutStep;
+}
+
+const MUSCLES: Record<string, MuscleKnowledge> = {
+  triceps: {
+    label: "triceps",
+    mobilize: { name: "Arm circles + elbow CARs", durationSec: 60, description: "Controlled rotations to prime the elbow and shoulder.", cues: ["full range", "slow"] },
+    strengthen: { name: "Cable/band triceps extension", sets: 3, reps: "10-12", description: "Drive full elbow extension under control.", cues: ["lock out", "controlled return"] },
+    stretch: { name: "Overhead triceps stretch", durationSec: 40, description: "Lengthen the triceps and elbow flexors.", cues: ["relax", "breathe"] },
+  },
+  biceps: {
+    label: "biceps",
+    mobilize: { name: "Elbow CARs + wrist circles", durationSec: 60, description: "Mobilize the elbow through its full range.", cues: ["slow", "full range"] },
+    strengthen: { name: "Dumbbell biceps curl", sets: 3, reps: "10-12", description: "Build elbow-flexion strength and control.", cues: ["no swing", "full range"] },
+    stretch: { name: "Wall biceps stretch", durationSec: 40, description: "Lengthen the biceps and front of the elbow.", cues: ["gentle", "breathe"] },
+  },
+  forearms: {
+    label: "forearms",
+    mobilize: { name: "Wrist circles + flexor/extensor rocks", durationSec: 60, description: "Prime the wrist and forearm.", cues: ["slow", "pain-free"] },
+    strengthen: { name: "Wrist curls + reverse curls", sets: 3, reps: "12-15", description: "Build grip and forearm control.", cues: ["full range", "light"] },
+    stretch: { name: "Kneeling wrist stretch", durationSec: 40, description: "Lengthen the wrist flexors and extensors.", cues: ["gentle", "breathe"] },
+  },
+  deltoids: {
+    label: "shoulders (deltoids)",
+    mobilize: { name: "Band shoulder dislocates", durationSec: 60, description: "Pass a band overhead and back to open the shoulders.", cues: ["straight arms", "smooth"] },
+    strengthen: { name: "Landmine press", sets: 3, reps: "8-10", description: "Build stable overhead pressing strength.", cues: ["ribs down", "full press"] },
+    stretch: { name: "Cross-body shoulder stretch", durationSec: 40, description: "Open the rear shoulder.", cues: ["relax", "breathe"] },
+  },
+  rotator_cuff: {
+    label: "rotator cuff",
+    mobilize: { name: "Band external rotations", durationSec: 60, description: "Warm and stabilize the shoulder.", cues: ["elbow pinned", "slow"] },
+    strengthen: { name: "Band face pulls", sets: 3, reps: "12-15", description: "Strengthen the rotator cuff and rear shoulder.", cues: ["pull to the face", "squeeze"] },
+    stretch: { name: "Sleeper stretch", durationSec: 40, description: "Lengthen the posterior cuff.", cues: ["gentle", "no pinch"] },
+  },
+  lats: {
+    label: "lats",
+    mobilize: { name: "Wall slides with scapular control", durationSec: 60, description: "Free the shoulders and engage the scapula.", cues: ["ribs down", "arms on wall"] },
+    strengthen: { name: "Lat pulldown / band pulldown", sets: 3, reps: "10-12", description: "Build pulling strength and shoulder control.", cues: ["lead with elbows", "controlled"] },
+    stretch: { name: "Overhead lat stretch", durationSec: 40, description: "Lengthen the lats and lateral trunk.", cues: ["reach long", "breathe"] },
+  },
+  glutes: {
+    label: "glutes",
+    mobilize: { name: "90/90 hip switches", durationSec: 60, description: "Rotate between hip positions to free the joint.", cues: ["control", "tall chest"] },
+    strengthen: { name: "Hip thrust", sets: 3, reps: "8-10", description: "Build hip-extension power.", cues: ["squeeze at top", "ribs down"] },
+    stretch: { name: "Figure-4 glute stretch", durationSec: 40, description: "Open the glutes and external rotators.", cues: ["relax", "breathe"] },
+  },
+  hamstrings: {
+    label: "hamstrings",
+    mobilize: { name: "Leg swings", durationSec: 60, description: "Dynamic swings to free the hamstrings and hips.", cues: ["controlled", "tall posture"] },
+    strengthen: { name: "Romanian deadlift", sets: 3, reps: "8-10", description: "Train the hip hinge and posterior chain.", cues: ["push hips back", "flat back"] },
+    stretch: { name: "Standing hamstring stretch", durationSec: 40, description: "Lengthen the hamstrings.", cues: ["soft knee", "hinge"] },
+  },
+  hip_flexors: {
+    label: "hip flexors",
+    mobilize: { name: "World's greatest stretch", durationSec: 60, description: "Open the hip flexors and rotate the trunk.", cues: ["long lunge", "rotate"] },
+    strengthen: { name: "Lying/hanging leg raises", sets: 3, reps: "10-12", description: "Strengthen the hip flexors and lower core.", cues: ["slow", "no swing"] },
+    stretch: { name: "Couch stretch", durationSec: 45, description: "Open the hip flexors of each leg.", cues: ["squeeze glute", "tall"] },
+  },
+  quadriceps: {
+    label: "quadriceps",
     mobilize: { name: "Bodyweight squat to stand", durationSec: 60, description: "Grease knee and hip range before loading.", cues: ["heels down", "knees track toes"] },
     strengthen: { name: "Goblet squat", sets: 3, reps: "8-10", description: "Build controlled knee-bend strength.", cues: ["chest up", "drive through floor"] },
     stretch: { name: "Standing quad stretch", durationSec: 40, description: "Lengthen the quads around the knee.", cues: ["knees together", "tall"] },
   },
-  ankle: {
-    group: "ankle",
-    more: {
-      observation: "you show more ankle dorsiflexion (shin over toes)",
-      cause: "excess dorsiflexion can mean weight is too far forward, hurting balance at contact",
-      fix: "keep weight centered over the mid-foot through the strike",
-      cue: "stay over mid-foot",
-    },
-    less: {
-      observation: "your ankle is stiffer/less flexed than the pro's",
-      cause: "limited ankle range reduces ground force and a stable base at contact",
-      fix: "allow the shin to travel forward and lock the ankle firmly at contact",
-      cue: "firm ankle at contact",
-    },
-    drill: "Banded ankle dorsiflexion mobilizations",
+  adductors: {
+    label: "adductors",
+    mobilize: { name: "Cossack squat rocks", durationSec: 60, description: "Open the inner thighs and hips.", cues: ["controlled", "flat foot"] },
+    strengthen: { name: "Copenhagen plank", sets: 3, reps: "20-30s", description: "Build adductor strength and stability.", cues: ["straight line", "brace"] },
+    stretch: { name: "Frog stretch", durationSec: 40, description: "Lengthen the adductors.", cues: ["gentle", "breathe"] },
+  },
+  calves: {
+    label: "calves",
     mobilize: { name: "Knee-to-wall ankle rocks", durationSec: 60, description: "Drive the knee over the toes to free the ankle.", cues: ["heel down", "slow"] },
     strengthen: { name: "Single-leg calf raise", sets: 3, reps: "12-15", description: "Strengthen the calf and stabilize the ankle.", cues: ["full height", "balance"] },
     stretch: { name: "Wall calf stretch", durationSec: 40, description: "Lengthen the calf and Achilles.", cues: ["straight back leg", "heel down"] },
   },
-  trunk_rotation: {
-    group: "trunk rotation",
-    more: {
-      observation: "you create more separation between shoulders and hips",
-      cause: "over-rotation can desync the kinetic chain and stress the lower back",
-      fix: "time the rotation so hips lead and shoulders follow rather than over-coiling",
-      cue: "hips lead, shoulders follow",
-    },
-    less: {
-      observation: "you create less shoulder-hip separation (X-factor) than the pro",
-      cause: "limited separation wastes the trunk's stretch-shorten power that drives the whole motion",
-      fix: "coil the shoulders against stable hips to build separation before you unwind",
-      cue: "coil, then unwind",
-    },
-    drill: "Medicine-ball rotational throws",
+  tibialis: {
+    label: "shins (tibialis)",
+    mobilize: { name: "Ankle dorsiflexion rocks", durationSec: 60, description: "Mobilize the front of the ankle.", cues: ["controlled", "full range"] },
+    strengthen: { name: "Tibialis raises", sets: 3, reps: "15-20", description: "Strengthen the front of the shin for ankle control.", cues: ["slow", "full range"] },
+    stretch: { name: "Kneeling shin stretch", durationSec: 40, description: "Lengthen the front of the shin and ankle.", cues: ["gentle", "breathe"] },
+  },
+  core: {
+    label: "core",
+    mobilize: { name: "Cat-camel + dead bug", durationSec: 60, description: "Wake up the deep core and spine.", cues: ["slow", "brace"] },
+    strengthen: { name: "Plank with reach", sets: 3, reps: "30-40s", description: "Build the core stability to hold posture.", cues: ["flat back", "brace"] },
+    stretch: { name: "Child's pose", durationSec: 40, description: "Decompress the spine and trunk.", cues: ["sink hips", "breathe"] },
+  },
+  obliques: {
+    label: "obliques",
     mobilize: { name: "Open-book thoracic rotations", durationSec: 60, description: "Rotate the upper back to free the trunk.", cues: ["follow the hand", "exhale"] },
     strengthen: { name: "Cable rotational chop", sets: 3, reps: "8-10/side", description: "Train rotational power from hips through trunk.", cues: ["start from hips", "fast"] },
-    stretch: { name: "Seated spinal twist", durationSec: 40, description: "Decompress and lengthen the trunk rotators.", cues: ["tall spine", "breathe"] },
+    stretch: { name: "Seated spinal twist", durationSec: 40, description: "Lengthen the trunk rotators.", cues: ["tall spine", "breathe"] },
   },
-  trunk_lean: {
-    group: "trunk lean",
-    more: {
-      observation: "your torso leans further from vertical",
-      cause: "excess lean shifts your balance point and can pull the swing off-plane",
-      fix: "stack the torso more upright over a stable base",
-      cue: "stack tall",
-    },
-    less: {
-      observation: "your torso stays more upright than the pro's",
-      cause: "too little lean can mean you aren't using forward posture/spine angle to set the swing plane",
-      fix: "match the pro's spine angle by hinging slightly more from the hips",
-      cue: "set the spine angle",
-    },
-    drill: "Posture-hold swings against a wall",
+  erector_spinae: {
+    label: "lower back (erector spinae)",
     mobilize: { name: "Cat-camel + thoracic extension", durationSec: 60, description: "Mobilize the spine into the working posture.", cues: ["segment by segment", "slow"] },
-    strengthen: { name: "Plank with reach", sets: 3, reps: "30-40s", description: "Build the core stability to hold posture.", cues: ["flat back", "brace"] },
+    strengthen: { name: "Back extension / bird-dog", sets: 3, reps: "10-12", description: "Build spinal-extensor endurance and posture control.", cues: ["long spine", "no overarch"] },
     stretch: { name: "Child's pose", durationSec: 40, description: "Decompress the spine after loading.", cues: ["sink hips", "breathe"] },
   },
-  shoulder_line_tilt: {
-    group: "shoulder line tilt",
-    more: {
-      observation: "your shoulders are more tilted (one higher than the other)",
-      cause: "excess shoulder tilt usually means leaning away from the target and an unstable base",
-      fix: "level the shoulders relative to the pro and keep the head centered",
-      cue: "level the shoulders",
-    },
-    less: {
-      observation: "your shoulders stay flatter/more level than the pro's",
-      cause: "some sports need shoulder tilt to get under the ball or set the launch angle",
-      fix: "allow the trail shoulder to drop slightly to match the pro's tilt",
-      cue: "trail shoulder down",
-    },
-    drill: "Mirror posture checks",
-    mobilize: { name: "Side-bend reaches", durationSec: 60, description: "Free the lateral trunk and shoulders.", cues: ["long side", "controlled"] },
-    strengthen: { name: "Suitcase carry", sets: 3, reps: "30m/side", description: "Build anti-tilt lateral core strength.", cues: ["stay level", "ribs down"] },
-    stretch: { name: "Overhead lat stretch", durationSec: 40, description: "Lengthen the lats and lateral trunk.", cues: ["reach long", "breathe"] },
-  },
-};
-
-const SPORT_FLAVOR: Record<string, string> = {
-  tennis: "Power flows from the legs up through trunk rotation into the racket arm.",
-  basketball: "Repeatable shooting mechanics depend on vertical alignment and a clean wrist snap.",
-  golf: "Sequencing — hips, then shoulders, then arms — is the largest source of distance.",
-  baseball: "Explosive rotation and a firm front side turn lower-body load into bat or arm speed.",
-  soccer: "Plant-foot placement and hip rotation set up a locked ankle at contact.",
-  boxing: "Power comes off the rear foot through hip rotation into the lead knuckles.",
-  volleyball: "Approach mechanics and shoulder range feed the wrist snap on the attack.",
-  swimming: "A high-elbow catch and core-driven body roll drive propulsion.",
-  custom: "Power depends on loading the body and releasing it in the right sequence.",
-};
-
-/**
- * Tennis-specific overlay. For tennis we replace the generic cause/fix/cue/drill
- * with stroke-relevant coaching language (kinetic chain, unit turn, X-factor,
- * contact-point extension). Anything not listed here falls back to the generic
- * KB above, and every other sport uses the generic KB unchanged. The numeric
- * `observation` is always kept generic so the guide stays grounded in the
- * measured angles. Scoped to tennis deliberately (see README coaching notes).
- */
-type TennisDir = Partial<Pick<DirText, "cause" | "fix" | "cue">> & { drill?: string };
-const TENNIS_OVERLAY: Record<string, Partial<Record<Dir, TennisDir>>> = {
-  hip: {
-    less: {
-      cause: "standing too tall means the legs never load, so the stroke becomes all arm",
-      fix: "sit into a deeper hip load during the unit turn, then drive up and through the ball",
-      cue: "load the outside hip, then drive up",
-      drill: "Loaded open-stance drives — coil onto the back hip and explode up into contact",
-    },
-    more: {
-      fix: "stay a touch taller through the hips so you can rotate freely instead of squatting under the ball",
-      cue: "tall hips, free rotation",
-      drill: "Rotational shadow swings staying tall through the turn",
-    },
-  },
-  knee: {
-    less: {
-      cause: "stiff, straight knees skip the leg drive that powers a modern groundstroke",
-      fix: "add a clear knee bend in the load, then push up off the court through contact",
-      cue: "bend to load, drive up",
-      drill: "Split-step into a loaded knee bend, then an explosive shadow swing",
-    },
-  },
-  trunk_rotation: {
-    less: {
-      cause: "an incomplete shoulder turn wastes the stretch-shorten 'X-factor' that whips the racket",
-      fix: "complete the unit turn — coil the shoulders past the hips — before starting the forward swing",
-      cue: "show your back to the net, then unwind",
-      drill: "Unit-turn coil-and-fire reps with a racket or resistance band",
-    },
-    more: {
-      fix: "let the hips and legs start the swing so the shoulders don't over-coil and arrive late",
-      cue: "hips lead, shoulders follow",
-      drill: "Hip-initiated rotation drill — fire the hip before the shoulder",
-    },
-  },
-  trunk_lean: {
-    less: {
-      cause: "staying bolt upright keeps your weight back instead of driving forward into the shot",
-      fix: "hinge slightly from the hips and get your chest moving forward through contact",
-      cue: "lead with the chest into the ball",
-      drill: "Hinge-and-drive groundstrokes stepping into the court",
-    },
-    more: {
-      fix: "stack a little taller so you don't collapse over the ball and lose your base",
-      cue: "stay tall over the base",
-      drill: "Balance-hold finishes — hold the follow-through position for two counts",
-    },
-  },
-  shoulder: {
-    more: {
-      cause: "carrying the arm too far from the body disconnects it from the trunk and strains the shoulder",
-      fix: "keep the elbow closer with a more compact take-back so body rotation carries the racket",
-      cue: "elbow in, let the body turn it",
-      drill: "Compact take-back drill — keep the racket inside the body line on the backswing",
-    },
-    less: {
-      cause: "too little arm separation shrinks the swing arc and the racket-head speed it can build",
-      fix: "create more space between arm and torso in the take-back to lengthen the swing arc",
-      cue: "make a bigger arc",
-      drill: "Full-extension swings reaching through a long contact zone",
-    },
-  },
-  elbow: {
-    more: {
-      cause: "an over-bent elbow at contact shortens the lever and leaks racket-head speed",
-      fix: "extend the arm through the hitting zone so the racket reaches full speed at contact",
-      cue: "long arm through contact",
-      drill: "Contact-point extension drill — freeze a long arm at the strike",
-    },
-    less: {
-      cause: "a locked, straight arm in the take-back removes the elastic whip the forearm needs",
-      fix: "keep a relaxed bend in the take-back and let the forearm lag, then snap through contact",
-      cue: "relaxed lag, snap late",
-      drill: "Lag-and-snap shadow swings — feel the racket trail, then release",
-    },
+  traps: {
+    label: "traps",
+    mobilize: { name: "Shoulder rolls + neck CARs", durationSec: 60, description: "Free the upper back and neck.", cues: ["slow", "full range"] },
+    strengthen: { name: "Suitcase carry", sets: 3, reps: "30m/side", description: "Build anti-tilt lateral and trap strength.", cues: ["stay level", "ribs down"] },
+    stretch: { name: "Upper-trap stretch", durationSec: 40, description: "Lengthen the upper traps and neck.", cues: ["gentle", "breathe"] },
   },
 };
 
 interface ResolvedKnowledge {
   group: string;
+  movement: string;
   observation: string;
-  cause: string;
-  fix: string;
+  correction: string;
   cue: string;
   drill: string;
+  muscles: string[];
 }
 
-/** Effective coaching knowledge for a joint+direction, with the tennis overlay
- * applied on top of the generic KB when the sport is tennis. */
-function resolveKnowledge(sportId: string, joint: JointName, dir: Dir): ResolvedKnowledge {
+/** Universal coaching knowledge for a joint+direction — purely mesh-mismatch
+ * based, identical for every sport. */
+function resolveKnowledge(joint: JointName, dir: Dir): ResolvedKnowledge {
   const group = jointKey(joint);
-  const k = KB[group];
-  const base = dir === "more" ? k.more : k.less;
-  const ov = sportId === "tennis" ? TENNIS_OVERLAY[group]?.[dir] : undefined;
+  const m = MECHANICS[group];
+  const base = dir === "more" ? m.more : m.less;
   return {
-    group: k.group,
+    group: m.group,
+    movement: m.movement,
     observation: base.observation,
-    cause: ov?.cause ?? base.cause,
-    fix: ov?.fix ?? base.fix,
-    cue: ov?.cue ?? base.cue,
-    drill: ov?.drill ?? k.drill,
+    correction: base.correction,
+    cue: base.cue,
+    drill: m.drill,
+    muscles: m.muscles,
   };
 }
 
-/** Keep only the most significant delta per body-part group (so a left and a
- * right knee don't both surface as separate, sometimes contradictory, issues).
- * Input should already be ordered by importance. */
+/** Friendly muscle-group labels for a joint's muscles. */
+function muscleLabels(joint: JointName): string[] {
+  const m = MECHANICS[jointKey(joint)];
+  return m.muscles.map((id) => MUSCLES[id]?.label ?? id);
+}
+
+/** Keep only the most significant delta per body-part group (so left and right
+ * of the same joint don't both surface). Input should be ordered by importance. */
 function dedupeByGroup(deltas: JointDelta[]): JointDelta[] {
   const seen = new Set<string>();
   const out: JointDelta[] = [];
@@ -343,9 +364,7 @@ function dedupeByGroup(deltas: JointDelta[]): JointDelta[] {
   return out;
 }
 
-/** The systematic, coachable gap for a joint: |signed bias| = |user mean − pro
- * mean|. This is what the guide reports as "the gap" (consistent with the
- * displayed means), not the noise-inflated mean abs delta. */
+/** The systematic, coachable gap for a joint: |signed bias| = |user − pro|. */
 function gapDeg(d: JointDelta): number {
   return Math.abs(d.signedBiasDeg);
 }
@@ -376,7 +395,6 @@ function worstPhaseFor(joint: JointName, phases: PhaseSummary[]): string | null 
   return best;
 }
 
-
 function titleCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -389,71 +407,112 @@ function slug(parts: string[]): string {
     .replace(/^-+|-+$/g, "");
 }
 
+/** Join a short list of labels into readable prose ("a, b and c"). */
+function listProse(items: string[]): string {
+  if (items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
 function buildGuide(req: GuideRequest): ImprovementGuide {
-  const { sport, shot, numericReport } = req;
+  const { shot, numericReport } = req;
   const deltas = numericReport.jointDeltas;
   const flagged = deltas.filter((d) => d.significance !== "low");
-  // One issue per body-part group (worst side first) so left/right of the same
-  // joint don't both surface as separate, sometimes contradictory, issues.
-  // Rank by the overall systematic gap (|bias|). One issue per body-part group.
+  // One issue per body-part group (worst side first), ranked by the systematic
+  // gap (|bias|) — the mesh mismatch the user should close.
   const ranked = dedupeByGroup([...flagged].sort((a, b) => gapDeg(b) - gapDeg(a)));
   const top = ranked.slice(0, 4);
 
   const simPct = Math.round(numericReport.overallSimilarity * 100);
-  const flavor = SPORT_FLAVOR[sport.id] ?? SPORT_FLAVOR.custom;
 
   const keyIssues = top.map((d) => {
     const dir: Dir = d.signedBiasDeg >= 0 ? "more" : "less";
-    const t = resolveKnowledge(sport.id, d.joint, dir);
+    const t = resolveKnowledge(d.joint, dir);
     const phase = worstPhaseFor(d.joint, numericReport.phases);
     const phaseClause = phase
       ? ` It shows up most during the ${phase.replace(/_/g, " ")} phase — focus your reps there.`
       : "";
     const priority = gapDeg(d) >= 20 ? "Prioritize this: " : "";
+    const muscles = muscleLabels(d.joint);
     return {
       title: `${titleCase(t.group)}: ${dir === "more" ? "too much" : "too little"} vs the pro`,
       joint: d.joint,
       observation: `${titleCase(t.observation)} ${numericClause(d)} — ${severityWord(gapDeg(d))} gap.`,
-      cause: t.cause + ".",
-      fix: `${priority}${t.fix}.${phaseClause}`,
+      cause: `This position is controlled mainly by your ${listProse(muscles)}.`,
+      fix: `${priority}To match the pro, ${t.correction}.${phaseClause}`,
+      muscles,
     };
   });
 
-  // Strengths: well-matched joints (smallest deltas), plus an overall note.
-  // Exclude any body-part group already surfaced as a key issue, so the same
-  // joint can't read as both a fault and a strength. The two sides of one joint
-  // routinely land in different significance buckets (asymmetric mechanics), so
-  // without this a flagged right knee and a well-matched left knee would both
-  // mention "knee" — contradicting the grouped-issue design (see comment above).
+  // Strengths: well-matched joints (smallest gaps), excluding any group already
+  // flagged so the same joint can't read as both a fault and a strength.
   const issueGroups = new Set(ranked.map((d) => jointKey(d.joint)));
   const matched = dedupeByGroup(
     [...deltas].filter((d) => d.significance === "low").sort((a, b) => gapDeg(a) - gapDeg(b)),
   )
     .filter((d) => !issueGroups.has(jointKey(d.joint)))
     .slice(0, 3)
-    .map((d) => `Your ${KB[jointKey(d.joint)].group} closely matches the pro (within ${Math.round(gapDeg(d))}°).`);
+    .map((d) => `Your ${MECHANICS[jointKey(d.joint)].group} closely matches the pro (within ${Math.round(gapDeg(d))}°).`);
   const strengths =
     matched.length > 0
       ? matched
-      : [`Overall technique similarity is ${simPct}% — a solid base to build on.`];
+      : [`Overall mesh similarity is ${simPct}% — a solid base to build on.`];
 
   const cues = Array.from(
-    new Set(top.map((d) => resolveKnowledge(sport.id, d.joint, d.signedBiasDeg >= 0 ? "more" : "less").cue)),
+    new Set(top.map((d) => resolveKnowledge(d.joint, d.signedBiasDeg >= 0 ? "more" : "less").cue)),
   ).slice(0, 6);
 
   const drills = Array.from(
-    new Set(top.map((d) => resolveKnowledge(sport.id, d.joint, d.signedBiasDeg >= 0 ? "more" : "less").drill)),
+    new Set(top.map((d) => resolveKnowledge(d.joint, d.signedBiasDeg >= 0 ? "more" : "less").drill)),
   );
 
-  // Count distinct body-part groups (after dedupe), not every left/right column,
-  // so the summary matches the grouped issue list shown below it.
   const issueCount = ranked.length;
   const summary =
     issueCount === 0
-      ? `Your ${shot} closely mirrors the pro at ${simPct}% overall similarity — no major mechanical gaps stood out. ${flavor} Keep reinforcing what's working and chase consistency.`
-      : `Your ${shot} reaches ${simPct}% overall similarity to the pro, with ${issueCount} area${issueCount > 1 ? "s" : ""} worth addressing. The biggest is your ${titleCase(resolveKnowledge(sport.id, top[0].joint, top[0].signedBiasDeg >= 0 ? "more" : "less").group)} (${Math.round(gapDeg(top[0]))}° off). ${flavor}`;
+      ? `Your ${shot} skeleton closely mirrors the pro at ${simPct}% overall mesh similarity — no major mismatches stood out. Keep reinforcing what's working and chase consistency.`
+      : `Your ${shot} reaches ${simPct}% overall mesh similarity to the pro, with ${issueCount} joint${issueCount > 1 ? "s" : ""} to bring into line. The biggest is your ${titleCase(resolveKnowledge(top[0].joint, top[0].signedBiasDeg >= 0 ? "more" : "less").group)} (${Math.round(gapDeg(top[0]))}° off). Close each gap by matching the pro's position and training the muscles that drive it.`;
 
   return { summary, strengths, keyIssues, drills, cues };
+}
+
+interface MuscleTarget {
+  id: string;
+  k: MuscleKnowledge;
+  /** Largest joint gap (deg) that implicates this muscle. */
+  gap: number;
+  /** Whether any implicating joint is a high-significance mismatch. */
+  high: boolean;
+  /** Joint groups (display) this muscle is being trained for. */
+  forGroups: string[];
+}
+
+/**
+ * Rank the muscle groups responsible for the mismatched joints. A muscle's
+ * priority is the largest joint gap it governs, so the muscles behind the
+ * biggest mesh differences are trained first/hardest. This is the heart of the
+ * "workouts based on the muscle groups that could cause a mismatch" design.
+ */
+function rankMuscles(targets: JointDelta[], limit: number): MuscleTarget[] {
+  const byId = new Map<string, MuscleTarget>();
+  for (const d of targets) {
+    const m = MECHANICS[jointKey(d.joint)];
+    if (!m) continue;
+    const gap = gapDeg(d);
+    const high = d.significance === "high";
+    for (const id of m.muscles) {
+      const k = MUSCLES[id];
+      if (!k) continue;
+      const existing = byId.get(id);
+      if (existing) {
+        existing.gap = Math.max(existing.gap, gap);
+        existing.high = existing.high || high;
+        if (!existing.forGroups.includes(m.group)) existing.forGroups.push(m.group);
+      } else {
+        byId.set(id, { id, k, gap, high, forGroups: [m.group] });
+      }
+    }
+  }
+  return [...byId.values()].sort((a, b) => b.gap - a.gap).slice(0, limit);
 }
 
 function buildWorkouts(req: GuideRequest): Workout[] {
@@ -462,54 +521,49 @@ function buildWorkouts(req: GuideRequest): Workout[] {
     .filter((d) => d.significance !== "low")
     .sort((a, b) => gapDeg(b) - gapDeg(a));
   // One target per body-part group; if nothing flagged, target the largest
-  // deltas anyway so the workouts are still useful.
-  const targets = dedupeByGroup(flagged.length > 0 ? flagged : numericReport.jointDeltas).slice(0, 3);
+  // gaps anyway so the workouts are still useful.
+  const targets = dedupeByGroup(flagged.length > 0 ? flagged : numericReport.jointDeltas).slice(0, 4);
   const highCount = numericReport.jointDeltas.filter((d) => d.significance === "high").length;
   const difficulty: Workout["difficulty"] =
     highCount >= 2 ? "advanced" : highCount === 1 ? "intermediate" : "beginner";
 
-  const targetKnowledge = targets.map((d) => ({
-    d,
-    k: KB[jointKey(d.joint)],
-    r: resolveKnowledge(sport.id, d.joint, d.signedBiasDeg >= 0 ? "more" : "less"),
-  }));
+  // The muscle groups behind the mismatches — the basis for every workout.
+  const muscles = rankMuscles(targets, 5);
+  const muscleLabelsList = muscles.map((m) => m.k.label);
   const targetsJoints = Array.from(new Set(targets.map((d) => d.joint)));
-  // Ground the workout in the measurements: name each target with its measured
-  // systematic gap so the athlete knows exactly why the exercise is in the plan.
-  const targetSummary = targetKnowledge
-    .map((t) => `${t.r.group} (${Math.round(gapDeg(t.d))}°)`)
-    .join(", ");
-  // Dose scales with the measured fault: a high-significance gap (≥15°) earns an
-  // extra strengthening set, so a 25° hip-load deficit is trained harder than a
-  // borderline 8° one. Clones the KB step — the KB itself stays canonical.
-  const strengthenFor = (t: { d: JointDelta; k: JointKnowledge }): WorkoutStep => {
-    const base = t.k.strengthen;
-    if (t.d.significance !== "high" || base.sets === undefined) return base;
+  const targetsMuscles = muscles.map((m) => m.id);
+
+  // A muscle implicated by a high-significance mismatch earns an extra strength
+  // set so the biggest gaps are trained harder.
+  const strengthenFor = (m: MuscleTarget): WorkoutStep => {
+    const base = m.k.strengthen;
+    if (!m.high || base.sets === undefined) return base;
     return {
       ...base,
       sets: base.sets + 1,
-      description: `${base.description} Extra set: this is your largest measured gap (${Math.round(gapDeg(t.d))}°).`,
+      description: `${base.description} Extra set: this muscle drives one of your largest mesh gaps (${Math.round(m.gap)}°).`,
     };
   };
   const dur = (steps: WorkoutStep[]): number =>
     Math.max(
       10,
       Math.round(
-        steps.reduce(
-          (m, s) => m + (s.durationSec ? s.durationSec / 60 : (s.sets ?? 3) * 1.5),
-          0,
-        ),
+        steps.reduce((acc, s) => acc + (s.durationSec ? s.durationSec / 60 : (s.sets ?? 3) * 1.5), 0),
       ),
     );
 
-  // 1. Mobility & activation.
-  const w1Warm = targetKnowledge.map((t) => t.k.mobilize).slice(0, 3);
-  const w1Main = targetKnowledge.map((t) => strengthenFor(t)).slice(0, 1);
-  const w1Cool = targetKnowledge.map((t) => t.k.stretch).slice(0, 2);
+  const muscleSummary = muscles
+    .map((m) => `${m.k.label} (${m.forGroups.join("/")}, ${Math.round(m.gap)}°)`)
+    .join(", ");
+
+  // 1. Mobility & activation — free up and switch on the implicated muscles.
+  const w1Warm = muscles.slice(0, 4).map((m) => m.k.mobilize);
+  const w1Main = muscles.slice(0, 2).map((m) => strengthenFor(m));
+  const w1Cool = muscles.slice(0, 2).map((m) => m.k.stretch);
   const workout1: Workout = {
     id: slug([sport.id, shot, "mobility"]),
     title: "Mobility & activation",
-    focus: `Free up and prime the joints flagged in your ${shot}.`,
+    focus: `Free up and switch on the muscles behind your ${shot} mesh gaps: ${listProse(muscleLabelsList.slice(0, 4))}.`,
     durationMin: dur([...w1Warm, ...w1Main, ...w1Cool]),
     difficulty: "beginner",
     equipment: ["resistance band"],
@@ -517,17 +571,16 @@ function buildWorkouts(req: GuideRequest): Workout[] {
     main: w1Main,
     cooldown: w1Cool,
     targetsJoints,
+    targetsMuscles,
     notes: "Do this on training days before skill work.",
   };
 
-  // 2. Corrective strength.
+  // 2. Corrective strength — strengthen the muscle groups causing the mismatch.
   const w2Warm: WorkoutStep[] = [
     { name: "Dynamic full-body warm-up", durationSec: 300, description: "Light cardio plus the mobility drills above.", cues: ["raise heart rate", "move through range"] },
   ];
-  const w2Main = targetKnowledge.map((t) => strengthenFor(t));
-  const w2Cool = targetKnowledge.map((t) => t.k.stretch).slice(0, 2);
-  // Progression guidance matched to how far off the mechanics actually are —
-  // the same signal that set the difficulty.
+  const w2Main = muscles.map((m) => strengthenFor(m));
+  const w2Cool = muscles.slice(0, 2).map((m) => m.k.stretch);
   const progression: Record<Workout["difficulty"], string> = {
     beginner: "Start light and own every position before adding load.",
     intermediate: "Add load gradually once every rep is crisp.",
@@ -536,7 +589,7 @@ function buildWorkouts(req: GuideRequest): Workout[] {
   const workout2: Workout = {
     id: slug([sport.id, shot, "strength"]),
     title: "Corrective strength",
-    focus: `Build strength where your mechanics differ most from the pro: ${targetSummary}.`,
+    focus: `Strengthen the muscle groups driving your biggest mismatches with the pro: ${muscleSummary}.`,
     durationMin: dur([...w2Warm, ...w2Main, ...w2Cool]),
     difficulty,
     equipment: ["dumbbells", "cable or band", "bench"],
@@ -544,39 +597,44 @@ function buildWorkouts(req: GuideRequest): Workout[] {
     main: w2Main,
     cooldown: w2Cool,
     targetsJoints,
+    targetsMuscles,
     notes: `2–3× per week with a day of recovery between sessions. ${progression[difficulty]}`,
   };
 
-  // 3. Skill & sequencing — turns the corrections into the actual motion.
+  // 3. Flexibility & position-matching — lengthen the muscles AND rehearse
+  //    matching the pro's exact joint positions (the mesh-matching skill).
   const phaseNote =
     numericReport.phases.length > 0
-      ? `Pay attention to the ${numericReport.phases
-          .map((p) => p.name.replace(/_/g, " "))
-          .join(" → ")} sequence.`
+      ? `Pay attention to the ${numericReport.phases.map((p) => p.name.replace(/_/g, " ")).join(" → ")} sequence.`
       : "Rehearse the full motion slowly, then build speed.";
-  const skillCues = Array.from(new Set(targetKnowledge.map((t) => t.r.cue)));
-  const w3Main: WorkoutStep[] = targetKnowledge.map((t) => ({
-    name: t.r.drill,
-    sets: 4,
-    reps: "6-8",
-    description: `Rehearse the correction for your ${t.r.group} — you're closing a measured ~${Math.round(gapDeg(t.d))}° gap to the pro.`,
-    cues: [t.r.cue],
-  }));
+  const w3Stretch = muscles.slice(0, 4).map((m) => m.k.stretch);
+  const w3Holds: WorkoutStep[] = targets.slice(0, 3).map((d) => {
+    const dir: Dir = d.signedBiasDeg >= 0 ? "more" : "less";
+    const t = resolveKnowledge(d.joint, dir);
+    return {
+      name: `Match-the-pro hold — ${t.group}`,
+      sets: 3,
+      reps: "20-30s holds",
+      description: `Set your ${t.group} to the pro's ~${d.proMeanDeg}° (you average ${d.userMeanDeg}°) and hold; film side-on and compare to close the ~${Math.round(gapDeg(d))}° gap.`,
+      cues: [t.cue],
+    };
+  });
   const workout3: Workout = {
-    id: slug([sport.id, shot, "skill"]),
-    title: "Skill & sequencing",
-    focus: `Transfer the corrections into your ${sport.name.toLowerCase()} ${shot.toLowerCase()}.`,
-    durationMin: dur([...w2Warm, ...w3Main]),
+    id: slug([sport.id, shot, "flexibility"]),
+    title: "Flexibility & position-matching",
+    focus: `Lengthen the tight muscles and groove the corrected positions so your skeleton matches the pro's.`,
+    durationMin: dur([...w3Stretch, ...w3Holds]),
     difficulty,
-    equipment: ["medicine ball", "your normal gear"],
+    equipment: ["mat", "a way to film yourself"],
     warmup: [
-      { name: "Shadow reps", durationSec: 180, description: `Slow-motion ${shot} reps focusing on the cues.`, cues: skillCues.slice(0, 3) },
+      { name: "Easy mobility flush", durationSec: 120, description: "Gentle movement to warm up.", cues: ["relax", "full range"] },
     ],
-    main: w3Main,
+    main: [...w3Holds, ...w3Stretch],
     cooldown: [
-      { name: "Easy mobility flush", durationSec: 120, description: "Gentle movement to cool down.", cues: ["relax", "breathe"] },
+      { name: "Relaxed breathing + decompress", durationSec: 120, description: "Down-regulate after the session.", cues: ["slow breaths", "relax"] },
     ],
     targetsJoints,
+    targetsMuscles,
     notes: phaseNote,
   };
 

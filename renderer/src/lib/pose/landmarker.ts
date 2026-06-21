@@ -48,11 +48,8 @@ async function getLandmarker(
   if (existing) return existing;
   const p = (async () => {
     const fileset = await FilesetResolver.forVisionTasks(WASM_CDN);
-    return await PoseLandmarker.createFromOptions(fileset, {
-      baseOptions: {
-        modelAssetPath: MODEL_URL,
-        delegate: "GPU",
-      },
+    const options = (delegate: "GPU" | "CPU") => ({
+      baseOptions: { modelAssetPath: MODEL_URL, delegate },
       runningMode: mode,
       numPoses: 1,
       minPoseDetectionConfidence: 0.5,
@@ -60,6 +57,22 @@ async function getLandmarker(
       minTrackingConfidence: 0.5,
       outputSegmentationMasks: false,
     });
+    // Prefer the GPU delegate for speed, but fall back to CPU when a usable
+    // WebGL/GPU context can't be created (VMs, remote-desktop sessions, headless
+    // or old integrated GPUs, hardware acceleration disabled, driver issues).
+    // MediaPipe REJECTS rather than silently downgrading, so without this the
+    // whole pipeline — the entire product — fails at the first extract on those
+    // machines. The same model + math run on either delegate, so the validated
+    // comparison rubric is unaffected; only speed changes.
+    try {
+      return await PoseLandmarker.createFromOptions(fileset, options("GPU"));
+    } catch (gpuErr) {
+      console.warn(
+        "MediaPipe GPU delegate unavailable; falling back to CPU (slower).",
+        gpuErr,
+      );
+      return await PoseLandmarker.createFromOptions(fileset, options("CPU"));
+    }
   })();
   landmarkers[key] = p;
   // If initialization fails (e.g. a transient network error fetching the WASM
@@ -247,6 +260,8 @@ export async function extractVideo(
     targetFps?: number;
     onProgress?: (p: ExtractionProgress) => void;
     maxFrames?: number;
+    /** Abort the (long, serial) extraction loop when the user cancels a run. */
+    signal?: AbortSignal;
   } & DetectOptions = {},
 ): Promise<{ frames: PoseFrame[]; fps: number; duration: number }> {
   const lm = await getLandmarker("VIDEO");
@@ -276,6 +291,9 @@ export async function extractVideo(
   const base = videoClock;
   let lastTs = base;
   for (let i = 0; i < total; i++) {
+    if (opts.signal?.aborted) {
+      throw new DOMException("Analysis cancelled", "AbortError");
+    }
     const t = (i + 0.5) / total * duration;
     await seekTo(video, t);
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);

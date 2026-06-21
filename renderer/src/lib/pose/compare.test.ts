@@ -84,6 +84,40 @@ describe("compare", () => {
     expect(report.alignment).toBeNull();
   });
 
+  it("attaches a downsampled, aligned skeleton mesh for the visual comparison", () => {
+    const frames = Array.from({ length: 60 }, () => defaultFrame());
+    const report = compare({
+      sport: SPORT,
+      shot: "Forehand",
+      pro: { frames, fps: 30, kind: "video" },
+      user: { frames: frames.map((f) => f.map((l) => ({ ...l }))), fps: 30 },
+    });
+    expect(report.mesh).not.toBeNull();
+    const mesh = report.mesh!;
+    expect(mesh.pairs.length).toBeGreaterThan(0);
+    expect(mesh.pairs.length).toBeLessThanOrEqual(40); // capped for compact storage
+    expect(mesh.keyIndex).toBeGreaterThanOrEqual(0);
+    expect(mesh.keyIndex).toBeLessThan(mesh.pairs.length);
+    // Each pair carries a full 33-landmark skeleton for both athletes.
+    for (const p of mesh.pairs) {
+      expect(p.pro).toHaveLength(33);
+      expect(p.user).toHaveLength(33);
+    }
+  });
+
+  it("single-frame mode persists exactly one matched skeleton pair", () => {
+    const pro = defaultFrame();
+    const userFrames = Array.from({ length: 10 }, () => defaultFrame());
+    const report = compare({
+      sport: SPORT,
+      shot: "Forehand",
+      pro: { frames: [pro], fps: 1, kind: "image" },
+      user: { frames: userFrames, fps: 30 },
+    });
+    expect(report.mesh!.pairs).toHaveLength(1);
+    expect(report.mesh!.keyIndex).toBe(0);
+  });
+
   it("single-frame: does NOT mirror a left-handed user against a left-handed pro image", () => {
     // Pro still image with the LEFT elbow flexed (a left-handed reference).
     const proImg = defaultFrame();
