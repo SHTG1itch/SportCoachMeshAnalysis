@@ -118,6 +118,37 @@ describe("compare", () => {
     expect(report.mesh!.keyIndex).toBe(0);
   });
 
+  // A joint that is occluded (low visibility) in the only frame backing it must
+  // not drive a confident coaching fault — confidence weighting can't rescue a
+  // single low-visibility sample (single-frame "pro as image" mode). Found on
+  // real extension-extracted footage: a pro image with an occluded arm produced
+  // a spurious "elbow too bent" fault.
+  it("does not flag a joint that was occluded in the pro image (low confidence)", () => {
+    const userFrames = Array.from({ length: 10 }, () => defaultFrame()); // straight, fully visible arm
+    const bentVisible = defaultFrame();
+    const bentOccluded = defaultFrame();
+    // Fold the right forearm up toward the shoulder -> large elbow flexion gap.
+    for (const f of [bentVisible, bentOccluded]) {
+      f[L.RIGHT_ELBOW] = { x: 0.25, y: 1.25, z: 0, visibility: f[L.RIGHT_ELBOW].visibility };
+      f[L.RIGHT_WRIST] = { x: 0.22, y: 1.35, z: 0, visibility: f[L.RIGHT_WRIST].visibility };
+    }
+    // ...but in one pro image the elbow+wrist are occluded (detector guess).
+    bentOccluded[L.RIGHT_ELBOW] = { ...bentOccluded[L.RIGHT_ELBOW], visibility: 0.1 };
+    bentOccluded[L.RIGHT_WRIST] = { ...bentOccluded[L.RIGHT_WRIST], visibility: 0.1 };
+
+    const run = (pro: PoseFrame) =>
+      compare({
+        sport: SPORT,
+        shot: "Forehand",
+        pro: { frames: [pro], fps: 1, kind: "image" },
+        user: { frames: userFrames, fps: 30 },
+      }).jointDeltas.find((d) => d.joint === "right_elbow")!;
+
+    // Visible: the big elbow gap IS flagged. Occluded: same gap, but not flagged.
+    expect(run(bentVisible).significance).not.toBe("low");
+    expect(run(bentOccluded).significance).toBe("low");
+  });
+
   it("single-frame: does NOT mirror a left-handed user against a left-handed pro image", () => {
     // Pro still image with the LEFT elbow flexed (a left-handed reference).
     const proImg = defaultFrame();

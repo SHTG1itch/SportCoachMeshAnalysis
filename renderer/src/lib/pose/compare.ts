@@ -15,7 +15,7 @@ import {
   featureConfidenceSequence,
 } from "./angles";
 import { normalizeAll } from "./normalize";
-import { fillGaps, despikeFrames, smoothFrames, detectionCoverage } from "./prepare";
+import { fillGaps, despikeFrames, smoothFrames, detectionCoverage, VIS_THRESHOLD } from "./prepare";
 import { L } from "./types";
 import {
   detectDominantSide,
@@ -318,6 +318,18 @@ function buildDelta(
   // single-frame spike). Means/bias use trimmed means too. All stay in degrees.
   const meanAbs = weightedTrimmedMean(diffsAbs, ws, 0.1);
   const signedBias = weightedTrimmedMean(signed, ws, 0.1);
+  // Average detection confidence backing this joint across the paired samples.
+  // When the joint was barely visible in either clip (occluded / out of frame),
+  // its angle is a detector guess — and the confidence WEIGHTING above cannot
+  // rescue it when there are too few samples to trim (e.g. single-frame "pro as
+  // image" mode: the weighted mean of one low-visibility sample is just that
+  // sample). Validated on real footage: a pro image with an occluded arm
+  // (visibility ~0.05) otherwise produced a confident "elbow too bent" fault.
+  // Gate significance on the backing confidence so we never coach a joint we
+  // could not actually see.
+  let sumW = 0;
+  for (let i = 0; i < n; i++) sumW += ws[i];
+  const avgConf = weights ? sumW / n : 1;
   return {
     joint: feat.name,
     label: feat.label,
@@ -327,8 +339,9 @@ function buildDelta(
     userMeanDeg: +weightedTrimmedMean(users, ws, 0.1).toFixed(2),
     signedBiasDeg: +signedBias.toFixed(2),
     // Significance is driven by the systematic offset (|bias|), not the
-    // noise-inflated mean abs delta — see significance().
-    significance: significance(Math.abs(signedBias)),
+    // noise-inflated mean abs delta — see significance(). A joint backed by too
+    // little detection confidence is never flagged (its angle is unreliable).
+    significance: avgConf < VIS_THRESHOLD ? "low" : significance(Math.abs(signedBias)),
   };
 }
 
