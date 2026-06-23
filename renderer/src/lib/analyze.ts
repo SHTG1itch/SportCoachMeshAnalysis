@@ -14,18 +14,29 @@ import {
   type ExtractionProgress,
 } from "./pose/landmarker";
 
-/** Core torso landmarks — if none of these is ever detected, no person was
+/** Core torso landmarks — if these are rarely detected, no usable person was
  * found in the clip. */
 const CORE_LANDMARKS = [L.LEFT_SHOULDER, L.RIGHT_SHOULDER, L.LEFT_HIP, L.RIGHT_HIP];
 
-/** Throw a clear, user-facing error when a video yielded zero detected poses.
- * Without this, extractVideo returns all-zero frames and compare() produces a
- * confident-looking but meaningless report (the image path already guards this
- * way; the video path did not). */
+/** Minimum fraction of frames that must contain a clear full-body pose for the
+ * comparison to be meaningful. Below this, almost everything is interpolated and
+ * the report (and coaching) would be confident garbage. Validated on real,
+ * poorly-framed sport footage: a ~0%-detected clip used to pass the old
+ * "exactly zero" gate and still drive a "0% similarity, fix 8 joints" guide.
+ * The softer <0.8 caveat in the result UI still covers the usable-but-imperfect
+ * range above this hard floor. */
+const MIN_DETECTION_COVERAGE = 0.2;
+
+/** Throw a clear, user-facing error when a video had too few detected poses to
+ * analyze. The image path already guards this way (detectImage throws); the
+ * video path did not. */
 function assertPoseDetected(frames: PoseFrame[], who: string): void {
-  if (detectionCoverage(frames, CORE_LANDMARKS) <= 0) {
+  const cov = detectionCoverage(frames, CORE_LANDMARKS);
+  if (cov < MIN_DETECTION_COVERAGE) {
     throw new Error(
-      `Could not detect a pose in ${who}. Make sure the full body is visible, well-lit, and in frame.`,
+      `Could not reliably detect a full-body pose in ${who} (only ${Math.round(
+        cov * 100,
+      )}% of frames had a clear view). Use footage where the whole body stays visible, well-lit, and in frame.`,
     );
   }
 }
