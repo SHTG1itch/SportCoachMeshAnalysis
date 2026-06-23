@@ -280,6 +280,14 @@ export async function extractVideo(
   );
   const fps = total / duration;
 
+  if (!(video.videoWidth > 0) || !(video.videoHeight > 0)) {
+    // Dimensions come from the metadata, not the duration; a 0×0 canvas would
+    // make every detectForVideo run on an empty frame (all zero poses). Guard
+    // here so the public API is safe even if a caller only waited for duration.
+    throw new Error(
+      "Video dimensions are not available yet — wait for 'loadedmetadata'.",
+    );
+  }
   const canvas = document.createElement("canvas");
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -290,31 +298,41 @@ export async function extractVideo(
   // Continue the shared monotonic clock past the previous clip (see videoClock).
   const base = videoClock;
   let lastTs = base;
-  for (let i = 0; i < total; i++) {
-    if (opts.signal?.aborted) {
-      throw new DOMException("Analysis cancelled", "AbortError");
+  try {
+    for (let i = 0; i < total; i++) {
+      if (opts.signal?.aborted) {
+        throw new DOMException("Analysis cancelled", "AbortError");
+      }
+      const t = (i + 0.5) / total * duration;
+      await seekTo(video, t);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      let ts = base + Math.round(t * 1000);
+      if (ts <= lastTs) ts = lastTs + 1;
+      lastTs = ts;
+      const res = lm.detectForVideo(canvas, ts);
+      let f = toFrame(res);
+      if (lmF) {
+        const resF = lmF.detectForVideo(mirrorOnCanvas(canvas, canvas.width, canvas.height), ts);
+        const flipped = toFrame(resF);
+        if (flipped && f) f = mergeTta(f, unmirrorFrame(flipped));
+        // Primary dropout but the mirrored view detected — recover the frame.
+        else if (flipped) f = unmirrorFrame(flipped);
+      }
+      frames.push(f ?? emptyFrame());
+      opts.onProgress?.({ completed: (i + 1) / total, frame: i + 1, totalFrames: total });
     }
-    const t = (i + 0.5) / total * duration;
-    await seekTo(video, t);
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    let ts = base + Math.round(t * 1000);
-    if (ts <= lastTs) ts = lastTs + 1;
-    lastTs = ts;
-    const res = lm.detectForVideo(canvas, ts);
-    let f = toFrame(res);
-    if (lmF) {
-      const resF = lmF.detectForVideo(mirrorOnCanvas(canvas, canvas.width, canvas.height), ts);
-      const flipped = toFrame(resF);
-      if (flipped && f) f = mergeTta(f, unmirrorFrame(flipped));
-      // Primary dropout but the mirrored view detected — recover the frame.
-      else if (flipped) f = unmirrorFrame(flipped);
-    }
-    frames.push(f ?? emptyFrame());
-    opts.onProgress?.({ completed: (i + 1) / total, frame: i + 1, totalFrames: total });
+  } finally {
+    // Advance the shared clock so the next clip's timestamps start strictly above
+    // the last one we ACTUALLY fed the cached landmarker — even when the loop
+    // throws partway (user cancel, seek error). The cached VIDEO instances have
+    // already consumed timestamps up to `lastTs`; persisting the clock in a
+    // `finally` keeps the next extractVideo monotonic. Without it, a cancelled or
+    // failed run leaves videoClock stale (low) while the instance's internal
+    // clock is high, so the NEXT analysis feeds backwards-running timestamps and
+    // MediaPipe rejects them ("Packet timestamp mismatch"), bricking every
+    // subsequent comparison until the app restarts.
+    videoClock = lastTs + 1;
   }
-  // Advance the shared clock so the next clip's timestamps start strictly above
-  // this clip's last one.
-  videoClock = lastTs + 1;
   return { frames, fps, duration };
 }
 
