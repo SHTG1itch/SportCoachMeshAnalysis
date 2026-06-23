@@ -10,7 +10,6 @@
 // ?case=single -> single-frame report (keyUserFrame, no phases)
 //
 // NOT part of the shipped app.
-import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { useStore } from "./store";

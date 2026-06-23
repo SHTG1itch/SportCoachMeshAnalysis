@@ -17,7 +17,7 @@ import { resetLandmarker } from "./lib/pose/landmarker";
 import { compare } from "./lib/pose/compare";
 import { computeAngles, JOINT_FEATURES } from "./lib/pose/angles";
 import { findSport } from "./lib/sports";
-import { L, type PoseFrame } from "./lib/pose/types";
+import { type PoseFrame } from "./lib/pose/types";
 
 const WASM_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm";
 const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task";
@@ -33,8 +33,6 @@ function setStatus(s: string) { curStatus = s; statusEl.textContent = s; }
 function flush() { if (pending) { clearTimeout(pending); pending = null; } post(); }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(3) : String(n));
 
-const CORE = [L.LEFT_SHOULDER, L.RIGHT_SHOULDER, L.LEFT_HIP, L.RIGHT_HIP];
-const isDet = (f: PoseFrame) => CORE.every((i) => f[i] && f[i].visibility >= 0.3);
 function emptyFrame(): PoseFrame { return Array.from({ length: 33 }, () => ({ x: 0, y: 0, z: 0, visibility: 0 })); }
 function toFrame(r: PoseLandmarkerResult): PoseFrame | null {
   if (!r.worldLandmarks?.length) return null;

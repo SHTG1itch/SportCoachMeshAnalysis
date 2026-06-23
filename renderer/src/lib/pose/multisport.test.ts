@@ -225,6 +225,10 @@ describe("multi-sport pipeline (sport-agnostic, every key joint)", () => {
         expect(ph.topDeltas.length).toBeGreaterThan(0);
         expect(ph.endFrame).toBeGreaterThanOrEqual(ph.startFrame);
       }
+      // The release-phase note is keyed on the actual key joint (right ankle),
+      // not a hardcoded wrist — describePhase must stay sport-agnostic.
+      const release = report.phases.find((p) => p.name === "release");
+      if (release?.note) expect(release.note.toLowerCase()).toContain("ankle");
     });
   });
 

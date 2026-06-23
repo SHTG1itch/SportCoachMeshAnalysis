@@ -125,10 +125,11 @@ npm run typecheck # tsc --noEmit for both tsconfigs
 ### Native module note
 
 `better-sqlite3` is a native module. On Windows it builds against the Node ABI
-of your installed Node runtime. If installs fail on your machine, run
-`npx electron-rebuild` after `npm install` or use a Node version manager that
-matches the Electron ABI. The renderer code (the entire analysis pipeline) has
-no native dependencies and will run under any Node for `npm test`.
+of your installed Node runtime, but Electron ships its own ABI. If the app fails
+to load the DB after `npm install`, run `npm run rebuild` (which invokes
+`electron-builder install-app-deps` to rebuild native deps against Electron's
+ABI). The renderer code (the entire analysis pipeline) has no native
+dependencies and will run under any Node for `npm test`.
 
 ### No API key, fully free
 

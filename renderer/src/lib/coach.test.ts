@@ -159,6 +159,25 @@ describe("native coach engine", () => {
     expect(strength.main.some((s) => s.name === "Goblet squat")).toBe(true); // quads
   });
 
+  it("maps an ankle mismatch to the calves/tibialis (soccer's primary joint)", () => {
+    const { guide, workouts } = generateGuideAndWorkouts(
+      req(
+        { jointDeltas: [delta("right_ankle", 16, 16, "high")] },
+        { id: "soccer", name: "Soccer", shots: ["Instep kick"], keyJoint: "right_ankle", description: "" },
+      ),
+    );
+    const ankle = guide.keyIssues.find((i) => i.joint === "right_ankle")!;
+    expect(ankle).toBeTruthy();
+    // keyIssue.muscles carries the friendly labels (tibialis -> "shins (tibialis)").
+    expect(ankle.muscles).toEqual(expect.arrayContaining(["calves", "shins (tibialis)"]));
+    // workout.targetsMuscles carries the muscle IDs.
+    for (const w of workouts) {
+      expect(w.targetsMuscles).toEqual(expect.arrayContaining(["calves", "tibialis"]));
+    }
+    const strength = workouts.find((w) => w.title === "Corrective strength")!;
+    expect(strength.main.some((s) => s.name === "Single-leg calf raise")).toBe(true);
+  });
+
   it("includes a match-the-pro position hold grounded in the measured angles", () => {
     const { workouts } = generateGuideAndWorkouts(
       req({ jointDeltas: [delta("right_hip", 24, -24, "high")] }),

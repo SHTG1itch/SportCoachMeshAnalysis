@@ -260,7 +260,8 @@ async function timestampResetRepro() {
   }
 
   emit(`  PASS A = "pro" video (ts ascending from ~16)`);
-  const a = await feed("novak_a", "PASS A (pro)", 80);
+  // PASS A advances the shared landmarker clock; its result isn't inspected.
+  await feed("novak_a", "PASS A (pro)", 80);
   emit(`  PASS B = "user" video on the SAME landmarker (ts RESTARTS from ~16 — the app's bug pattern)`);
   const b = await feed("timo_fh", "PASS B (user)", 80);
   emit(`\n  VERDICT:`);

@@ -15,7 +15,8 @@
     "start": "cross-env NODE_ENV=production electron .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p renderer/tsconfig.json --noEmit && tsc -p electron/tsconfig.json --noEmit"
+    "typecheck": "tsc -p renderer/tsconfig.json --noEmit && tsc -p electron/tsconfig.json --noEmit",
+    "rebuild": "electron-builder install-app-deps"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.34",
