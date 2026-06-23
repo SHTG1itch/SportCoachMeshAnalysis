@@ -79,7 +79,10 @@ function trimmedMean(xs: number[], trim = 0.1): number {
     sum += s[i];
     c++;
   }
-  return c ? sum / c : s[Math.floor(n / 2)];
+  if (c) return sum / c;
+  // Degenerate (everything trimmed) — fall back to a true median, averaging the
+  // two central samples for even n rather than picking the upper-middle one.
+  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }
 
 /** Value at percentile `p` (0..1) of `xs` (nearest-rank). */
@@ -295,12 +298,19 @@ function buildDelta(
   const users: number[] = [];
   const ws: number[] = [];
   for (let i = 0; i < n; i++) {
-    const d = userAngles[i] - proAngles[i];
+    const p = proAngles[i];
+    const u = userAngles[i];
+    // Defense in depth: the angle math (vec.angleBetweenDeg) clamps and never
+    // returns NaN today, but a single non-finite sample would otherwise poison
+    // the sort/sum of every robust statistic below. Drop such a sample by giving
+    // it zero weight and a neutral value so it cannot move (or NaN) the result.
+    const ok = Number.isFinite(p) && Number.isFinite(u);
+    const d = ok ? u - p : 0;
     diffsAbs.push(Math.abs(d));
     signed.push(d);
-    pros.push(proAngles[i]);
-    users.push(userAngles[i]);
-    ws.push(weights ? weights[i] : 1);
+    pros.push(ok ? p : 0);
+    users.push(ok ? u : 0);
+    ws.push(ok ? (weights ? weights[i] : 1) : 0);
   }
   // Robust statistics so a handful of bad frames (detection errors, DTW
   // mis-pairings) can't dominate. meanDeltaDeg is a trimmed mean of the absolute
@@ -399,6 +409,16 @@ function buildMesh(
  */
 export function compare(input: CompareInput): AnalysisReport {
   const { sport, shot } = input;
+  // Both sides need at least one pose frame. An empty sequence otherwise yields
+  // an undefined single_frame target / paired row that crashes the per-joint
+  // accumulation downstream. The app's extractors guard upstream (image: throws
+  // "Could not detect a pose"; video: zero-coverage guard), but compare() is a
+  // public, unit-tested entry point and must fail loudly rather than crash.
+  if (input.pro.frames.length === 0 || input.user.frames.length === 0) {
+    throw new Error(
+      "compare(): both the pro and user must have at least one pose frame.",
+    );
+  }
   // Clean the raw landmark streams before any geometry is computed:
   //   1. fillGaps  — repair missing/occluded landmarks (e.g. all-zero frames
   //      from detection dropouts) so they don't inject spurious "fully
@@ -428,8 +448,13 @@ export function compare(input: CompareInput): AnalysisReport {
   const userConfRaw = featureConfidenceSequence(input.user.frames);
   const userConfMirrored = mirrorAnglesSequence(userConfRaw);
 
+  // single_frame only for an actual pro IMAGE or a genuinely single-frame clip.
+  // A 2-frame video used to be downgraded here too (proAngles.length <= 2),
+  // which silently discarded its second frame and all alignment/phases; a
+  // 2-frame video can still form a (trivial) DTW path, so keep it in sequence
+  // mode and only collapse to single_frame when there is literally one frame.
   const mode: "sequence" | "single_frame" =
-    input.pro.kind === "image" || proAngles.length <= 2 ? "single_frame" : "sequence";
+    input.pro.kind === "image" || proAngles.length < 2 ? "single_frame" : "sequence";
 
   // Handedness: infer each athlete's dominant side from how much the sport's
   // key joint (e.g. the racket wrist, the kicking ankle) moves. If they differ,

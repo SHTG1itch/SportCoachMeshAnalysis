@@ -157,8 +157,8 @@ describe("multi-sport pipeline (sport-agnostic, every key joint)", () => {
       expect(report.jointDeltas.length).toBe(13);
       expect(report.mesh, sport.id).not.toBeNull();
       expect(report.mesh!.pairs.length).toBeGreaterThan(0);
-      expect(["left", "right"]).toContain(report.handedness.pro);
-      expect(["left", "right"]).toContain(report.handedness.user);
+      expect(["left", "right"]).toContain(report.handedness!.pro);
+      expect(["left", "right"]).toContain(report.handedness!.user);
 
       // Coach must produce a usable guide + exactly three workouts for any sport.
       const { guide, workouts } = generateGuideAndWorkouts({
@@ -233,7 +233,7 @@ describe("multi-sport pipeline (sport-agnostic, every key joint)", () => {
     const proRight = buildClip("ankle");
     const userLeft = mirrorClip(proRight); // same kick, opposite leg
     const report = compareClip(soccer, proRight, userLeft);
-    expect(report.handedness.mirrored).toBe(true);
+    expect(report.handedness!.mirrored).toBe(true);
     // After mirroring, the lefty's kick should line up limb-for-limb with the
     // righty pro and score as a strong match rather than a spurious mismatch.
     expect(report.overallSimilarity).toBeGreaterThanOrEqual(0.9);
@@ -270,7 +270,7 @@ describe("multi-sport pipeline (sport-agnostic, every key joint)", () => {
     expect(kneeIssue, "knee should be a flagged key issue").toBeTruthy();
     // "more bent" maps to the straighten-the-knee correction.
     expect(kneeIssue!.fix.toLowerCase()).toContain("straighten");
-    expect(kneeIssue!.muscles.length).toBeGreaterThan(0);
+    expect((kneeIssue!.muscles ?? []).length).toBeGreaterThan(0);
   });
 
   it("never lists the same joint group as both a fault and a strength (no contradictions)", () => {
@@ -296,7 +296,12 @@ describe("multi-sport pipeline (sport-agnostic, every key joint)", () => {
     });
     const groupOf = (j: JointName): string =>
       ["elbow", "shoulder", "hip", "knee", "ankle"].find((g) => j.endsWith(g)) ?? j;
-    const issueGroups = new Set(guide.keyIssues.map((k) => groupOf(k.joint)));
+    const issueGroups = new Set(
+      guide.keyIssues
+        .map((k) => k.joint)
+        .filter((j): j is JointName => !!j)
+        .map(groupOf),
+    );
     for (const s of guide.strengths) {
       // strengths are prose; just ensure no flagged group name is praised
       for (const g of issueGroups) {

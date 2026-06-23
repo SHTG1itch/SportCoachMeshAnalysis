@@ -220,12 +220,19 @@ export function detectUpSign(frames: PoseFrame[]): number {
     const lh = f[L.LEFT_HIP];
     const rh = f[L.RIGHT_HIP];
     if (!ls || !rs || !lh || !rh) continue;
-    if (ls.visibility < 0.3 || rs.visibility < 0.3 || lh.visibility < 0.3 || rh.visibility < 0.3) continue;
+    if (
+      ls.visibility < VIS_THRESHOLD ||
+      rs.visibility < VIS_THRESHOLD ||
+      lh.visibility < VIS_THRESHOLD ||
+      rh.visibility < VIS_THRESHOLD
+    )
+      continue;
     dys.push((ls.y + rs.y) / 2 - (lh.y + rh.y) / 2);
   }
   if (dys.length === 0) return 1;
   dys.sort((a, b) => a - b);
-  const med = dys[Math.floor(dys.length / 2)];
+  const m = dys.length;
+  const med = m % 2 ? dys[(m - 1) / 2] : (dys[m / 2 - 1] + dys[m / 2]) / 2;
   return med < 0 ? -1 : 1;
 }
 

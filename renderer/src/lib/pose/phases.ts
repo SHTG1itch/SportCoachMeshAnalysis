@@ -2,13 +2,23 @@ import type { PoseFrame } from "./types";
 import { L } from "./types";
 import type { JointName } from "@shared/types";
 
+// Every sided body part handedness.ts can pick as a key joint, so phase
+// detection anchors on the actual moving joint for ALL sports (not just the
+// wrist/ankle/elbow trio) — otherwise a shoulder/hip/knee-keyed sport silently
+// degrades to a single "full" phase.
 const JOINT_TO_LANDMARK: Partial<Record<JointName, number>> = {
   left_wrist: L.LEFT_WRIST,
   right_wrist: L.RIGHT_WRIST,
-  left_ankle: L.LEFT_ANKLE,
-  right_ankle: L.RIGHT_ANKLE,
   left_elbow: L.LEFT_ELBOW,
   right_elbow: L.RIGHT_ELBOW,
+  left_shoulder: L.LEFT_SHOULDER,
+  right_shoulder: L.RIGHT_SHOULDER,
+  left_hip: L.LEFT_HIP,
+  right_hip: L.RIGHT_HIP,
+  left_knee: L.LEFT_KNEE,
+  right_knee: L.RIGHT_KNEE,
+  left_ankle: L.LEFT_ANKLE,
+  right_ankle: L.RIGHT_ANKLE,
 };
 
 export interface Phase {

@@ -79,7 +79,7 @@ const MECHANICS: Record<string, JointMechanics> = {
       cue: "softer elbow to match the pro",
     },
     drill: "Slow-motion reps freezing the elbow at the pro's angle, filmed side-on to compare",
-    muscles: ["triceps", "biceps"],
+    muscles: ["triceps", "biceps", "forearms"],
   },
   shoulder: {
     group: "shoulder",
@@ -111,7 +111,7 @@ const MECHANICS: Record<string, JointMechanics> = {
       cue: "hinge more to match",
     },
     drill: "Hip-hinge holds set to the pro's hip angle, filmed and compared",
-    muscles: ["glutes", "hamstrings", "hip_flexors"],
+    muscles: ["glutes", "hamstrings", "hip_flexors", "adductors"],
   },
   knee: {
     group: "knee",
@@ -191,7 +191,7 @@ const MECHANICS: Record<string, JointMechanics> = {
       cue: "match the pro's tilt",
     },
     drill: "Filmed shoulder-line holds matching the pro's tilt",
-    muscles: ["obliques", "core"],
+    muscles: ["obliques", "core", "traps"],
   },
 };
 
@@ -380,14 +380,27 @@ function severityWord(gap: number): string {
   return "a small";
 }
 
-/** The phase in which this joint's systematic difference is largest, if the data
- * localizes it. */
-function worstPhaseFor(joint: JointName, phases: PhaseSummary[]): string | null {
+/** The phase in which this joint's systematic difference is largest AND points
+ * the SAME direction as the overall (fix) bias, if the data localizes it.
+ *
+ * The sign filter is essential: the fix text's direction ("straighten more" vs
+ * "softer bend") comes from the overall signed bias, but each phase carries its
+ * OWN independent signed bias (compare.ts buildDelta), which can point the
+ * opposite way. Without the filter we could tell the user to straighten the
+ * elbow and then send them to rehearse the exact phase where it is already too
+ * straight — directly self-contradictory advice. The seed of 0 (was -1) also
+ * means a phase where the joint perfectly matches the pro is never chosen. */
+function worstPhaseFor(
+  joint: JointName,
+  phases: PhaseSummary[],
+  overallSign: number,
+): string | null {
   let best: string | null = null;
-  let bestVal = -1;
+  let bestVal = 0;
   for (const p of phases) {
     const hit = p.topDeltas.find((td) => td.joint === joint);
-    if (hit && gapDeg(hit) > bestVal) {
+    if (!hit || Math.sign(hit.signedBiasDeg) !== overallSign) continue;
+    if (gapDeg(hit) > bestVal) {
       bestVal = gapDeg(hit);
       best = p.name;
     }
@@ -414,9 +427,22 @@ function listProse(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
+/** The body-part groups the workouts will train (one per group, worst gaps
+ * first), so the guide can keep them out of the "strengths" list. Mirrors the
+ * target selection in buildWorkouts so a joint can never be praised as a
+ * strength while a workout simultaneously calls it a gap to close. */
+function workoutTargetGroups(deltas: JointDelta[]): Set<string> {
+  const known = deltas.filter((d) => MECHANICS[jointKey(d.joint)]);
+  const flagged = known.filter((d) => d.significance !== "low");
+  const pool = (flagged.length > 0 ? flagged : known).slice().sort((a, b) => gapDeg(b) - gapDeg(a));
+  return new Set(dedupeByGroup(pool).slice(0, 4).map((d) => jointKey(d.joint)));
+}
+
 function buildGuide(req: GuideRequest): ImprovementGuide {
   const { shot, numericReport } = req;
-  const deltas = numericReport.jointDeltas;
+  // Defensive: only coach joints we have mechanics for (the 13 features all do;
+  // this guards a future/foreign joint from crashing resolveKnowledge).
+  const deltas = numericReport.jointDeltas.filter((d) => MECHANICS[jointKey(d.joint)]);
   const flagged = deltas.filter((d) => d.significance !== "low");
   // One issue per body-part group (worst side first), ranked by the systematic
   // gap (|bias|) — the mesh mismatch the user should close.
@@ -428,7 +454,7 @@ function buildGuide(req: GuideRequest): ImprovementGuide {
   const keyIssues = top.map((d) => {
     const dir: Dir = d.signedBiasDeg >= 0 ? "more" : "less";
     const t = resolveKnowledge(d.joint, dir);
-    const phase = worstPhaseFor(d.joint, numericReport.phases);
+    const phase = worstPhaseFor(d.joint, numericReport.phases, Math.sign(d.signedBiasDeg));
     const phaseClause = phase
       ? ` It shows up most during the ${phase.replace(/_/g, " ")} phase — focus your reps there.`
       : "";
@@ -444,13 +470,17 @@ function buildGuide(req: GuideRequest): ImprovementGuide {
     };
   });
 
-  // Strengths: well-matched joints (smallest gaps), excluding any group already
-  // flagged so the same joint can't read as both a fault and a strength.
+  // Strengths: well-matched joints (smallest gaps), excluding any group that is
+  // either flagged OR targeted by a workout — so the same joint can never read
+  // as both a strength ("closely matches the pro") and a gap a workout tells the
+  // user to close. (When nothing is flagged the workouts still target the
+  // largest gaps, which must not also be praised.)
   const issueGroups = new Set(ranked.map((d) => jointKey(d.joint)));
+  const targetGroups = workoutTargetGroups(deltas);
   const matched = dedupeByGroup(
     [...deltas].filter((d) => d.significance === "low").sort((a, b) => gapDeg(a) - gapDeg(b)),
   )
-    .filter((d) => !issueGroups.has(jointKey(d.joint)))
+    .filter((d) => !issueGroups.has(jointKey(d.joint)) && !targetGroups.has(jointKey(d.joint)))
     .slice(0, 3)
     .map((d) => `Your ${MECHANICS[jointKey(d.joint)].group} closely matches the pro (within ${Math.round(gapDeg(d))}°).`);
   const strengths =
@@ -517,12 +547,14 @@ function rankMuscles(targets: JointDelta[], limit: number): MuscleTarget[] {
 
 function buildWorkouts(req: GuideRequest): Workout[] {
   const { sport, shot, numericReport } = req;
-  const flagged = numericReport.jointDeltas
+  // Defensive: only build from joints we have mechanics/muscles for (see buildGuide).
+  const known = numericReport.jointDeltas.filter((d) => MECHANICS[jointKey(d.joint)]);
+  const flagged = known
     .filter((d) => d.significance !== "low")
     .sort((a, b) => gapDeg(b) - gapDeg(a));
   // One target per body-part group; if nothing flagged, target the largest
   // gaps anyway so the workouts are still useful.
-  const targets = dedupeByGroup(flagged.length > 0 ? flagged : numericReport.jointDeltas).slice(0, 4);
+  const targets = dedupeByGroup(flagged.length > 0 ? flagged : known).slice(0, 4);
   const highCount = numericReport.jointDeltas.filter((d) => d.significance === "high").length;
   const difficulty: Workout["difficulty"] =
     highCount >= 2 ? "advanced" : highCount === 1 ? "intermediate" : "beginner";
