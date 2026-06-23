@@ -56,6 +56,20 @@ function requireDb(): Database.Database {
   return db;
 }
 
+/** Checkpoint the WAL and close the connection on app shutdown. Truncating the
+ * checkpoint flushes pending writes back into the main DB file so we don't leave
+ * an ever-growing -wal alongside it. Safe to call when the DB was never opened. */
+export function closeDb(): void {
+  if (!db) return;
+  try {
+    db.pragma("wal_checkpoint(TRUNCATE)");
+  } catch {
+    // best-effort; closing below still flushes
+  }
+  db.close();
+  db = null;
+}
+
 // ---- Analyses ----
 
 export function saveAnalysis(r: AnalysisRecord): void {
