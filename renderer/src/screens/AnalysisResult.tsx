@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { ArrowLeft, RefreshCw, Save, Sparkles, Trash2 } from "lucide-react";
 import type { AnalysisRecord, SavedWorkout, Workout } from "@shared/types";
@@ -11,6 +11,14 @@ import { MeshCompare } from "../components/MeshCompare";
 import { useStore } from "../store";
 
 type TabId = "summary" | "skeleton" | "joints" | "guide" | "workouts";
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "summary", label: "Summary" },
+  { id: "skeleton", label: "Skeleton" },
+  { id: "joints", label: "Joint breakdown" },
+  { id: "guide", label: "Coaching guide" },
+  { id: "workouts", label: "Workouts" },
+];
 
 export function AnalysisResult({
   record,
@@ -28,6 +36,20 @@ export function AnalysisResult({
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [workoutError, setWorkoutError] = useState<string | null>(null);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const onTabKeyDown = (e: React.KeyboardEvent, idx: number) => {
+    let next = idx;
+    if (e.key === "ArrowRight") next = (idx + 1) % TABS.length;
+    else if (e.key === "ArrowLeft") next = (idx - 1 + TABS.length) % TABS.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = TABS.length - 1;
+    else return;
+    e.preventDefault();
+    setTab(TABS[next].id);
+    tabRefs.current[next]?.focus();
+  };
 
   const { report } = current;
 
@@ -67,6 +89,7 @@ export function AnalysisResult({
   };
 
   const onSaveWorkout = async (w: Workout) => {
+    setWorkoutError(null);
     const saved: SavedWorkout = {
       id: w.id,
       savedAt: new Date().toISOString(),
@@ -74,8 +97,15 @@ export function AnalysisResult({
       workout: w,
       tags: [report.sport.name, report.shot],
     };
-    await window.app.saveWorkout(saved);
-    await refresh();
+    try {
+      await window.app.saveWorkout(saved);
+      await refresh();
+    } catch (e) {
+      // Surface the failure instead of leaving an unhandled promise rejection.
+      setWorkoutError(
+        e instanceof Error ? `Couldn't save workout: ${e.message}` : "Couldn't save workout.",
+      );
+    }
   };
 
   const onDelete = async () => {
@@ -172,24 +202,43 @@ export function AnalysisResult({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-white/5" role="tablist" aria-label="Analysis sections">
-        <Tab id="summary" tab={tab} setTab={setTab}>
-          Summary
-        </Tab>
-        <Tab id="skeleton" tab={tab} setTab={setTab}>
-          Skeleton
-        </Tab>
-        <Tab id="joints" tab={tab} setTab={setTab}>
-          Joint breakdown
-        </Tab>
-        <Tab id="guide" tab={tab} setTab={setTab}>
-          Coaching guide
-        </Tab>
-        <Tab id="workouts" tab={tab} setTab={setTab}>
-          Workouts
-        </Tab>
+      <div
+        className="flex items-center gap-2 border-b border-white/5"
+        role="tablist"
+        aria-label="Analysis sections"
+      >
+        {TABS.map((t, i) => (
+          <button
+            key={t.id}
+            ref={(el) => {
+              tabRefs.current[i] = el;
+            }}
+            role="tab"
+            id={`tab-${t.id}`}
+            aria-selected={tab === t.id}
+            aria-controls={`panel-${t.id}`}
+            tabIndex={tab === t.id ? 0 : -1}
+            onClick={() => setTab(t.id)}
+            onKeyDown={(e) => onTabKeyDown(e, i)}
+            className={clsx(
+              "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
+              tab === t.id
+                ? "border-accent-500 text-ink-50"
+                : "border-transparent text-ink-400 hover:text-ink-100",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
+      <div
+        role="tabpanel"
+        id={`panel-${tab}`}
+        aria-labelledby={`tab-${tab}`}
+        tabIndex={0}
+        className="focus:outline-none"
+      >
       {tab === "summary" && (
         <div className="grid grid-cols-2 gap-6">
           <div className="card p-5">
@@ -287,6 +336,11 @@ export function AnalysisResult({
             </div>
           ) : (
             <div className="grid gap-4">
+              {workoutError && (
+                <div className="text-xs text-bad" role="alert">
+                  {workoutError}
+                </div>
+              )}
               {report.workouts.map((w) => (
                 <WorkoutCard
                   key={w.id}
@@ -299,35 +353,8 @@ export function AnalysisResult({
           )}
         </>
       )}
+      </div>
     </div>
   );
 }
 
-function Tab({
-  id,
-  tab,
-  setTab,
-  children,
-}: {
-  id: TabId;
-  tab: TabId;
-  setTab: (t: TabId) => void;
-  children: React.ReactNode;
-}) {
-  const selected = tab === id;
-  return (
-    <button
-      role="tab"
-      aria-selected={selected}
-      onClick={() => setTab(id)}
-      className={clsx(
-        "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
-        selected
-          ? "border-accent-500 text-ink-50"
-          : "border-transparent text-ink-400 hover:text-ink-100",
-      )}
-    >
-      {children}
-    </button>
-  );
-}

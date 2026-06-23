@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Save, ShieldCheck } from "lucide-react";
 import { useStore } from "../store";
 
@@ -8,16 +8,26 @@ export function Settings() {
 
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [saved, setSaved] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (settings) setTheme(settings.theme);
   }, [settings]);
 
+  // Clear the "Saved" toast timer on unmount so it can't fire setState after the
+  // component is gone (and replace any in-flight timer on a rapid re-save).
+  useEffect(() => {
+    return () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    };
+  }, []);
+
   const save = async () => {
     await window.app.setSettings({ theme });
     await refreshSettings();
     setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaved(false), 1500);
   };
 
   return (
@@ -47,8 +57,11 @@ export function Settings() {
         </div>
 
         <div>
-          <div className="label mb-2">Theme</div>
+          <label className="label mb-2 block" htmlFor="theme-select">
+            Theme
+          </label>
           <select
+            id="theme-select"
             className="input"
             value={theme}
             onChange={(e) => setTheme(e.target.value as "dark" | "light")}

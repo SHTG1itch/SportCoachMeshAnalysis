@@ -6,7 +6,10 @@ import clsx from "clsx";
 interface Props {
   workout: Workout;
   saved: boolean;
-  onSave: () => void;
+  /** Toggle/save action. Omit to render the saved state as a passive indicator
+   * (e.g. in the library, where removal is a separate explicit control) so the
+   * "Saved" button doesn't double as a destructive action. */
+  onSave?: () => void;
 }
 
 const DIFFICULTY_STYLE: Record<Workout["difficulty"], string> = {
@@ -32,19 +35,30 @@ export function WorkoutCard({ workout, saved, onSave }: Props) {
           <h3 className="text-lg font-semibold text-ink-50">{workout.title}</h3>
           <p className="text-sm text-ink-300 mt-1">{workout.focus}</p>
         </div>
-        <button
-          onClick={onSave}
-          className={clsx(
-            "btn",
-            saved
-              ? "bg-accent-500/10 text-accent-400 border border-accent-500/30"
-              : "text-ink-300 hover:text-ink-50 hover:bg-white/5 border border-white/5",
-          )}
-          title={saved ? "Saved" : "Save workout"}
-        >
-          {saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
-          {saved ? "Saved" : "Save"}
-        </button>
+        {onSave ? (
+          <button
+            onClick={onSave}
+            className={clsx(
+              "btn",
+              saved
+                ? "bg-accent-500/10 text-accent-400 border border-accent-500/30"
+                : "text-ink-300 hover:text-ink-50 hover:bg-white/5 border border-white/5",
+            )}
+            title={saved ? "Saved" : "Save workout"}
+          >
+            {saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
+            {saved ? "Saved" : "Save"}
+          </button>
+        ) : (
+          // Passive status indicator (not a button) — no action wired, so it
+          // can't be mistaken for a control.
+          <span
+            className="btn bg-accent-500/10 text-accent-400 border border-accent-500/30 cursor-default"
+            title="Saved to your library"
+          >
+            <BookmarkCheck size={14} /> Saved
+          </span>
+        )}
       </div>
 
       {workout.targetsMuscles && workout.targetsMuscles.length > 0 ? (

@@ -16,8 +16,8 @@ export function GuideView({ guide }: { guide: ImprovementGuide }) {
             <div className="h3 m-0">What you're doing well</div>
           </div>
           <ul className="space-y-2">
-            {guide.strengths.map((s, i) => (
-              <li key={i} className="text-sm text-ink-100 flex gap-2">
+            {guide.strengths.map((s) => (
+              <li key={s} className="text-sm text-ink-100 flex gap-2">
                 <span className="text-ok mt-1">•</span>
                 <span>{s}</span>
               </li>
@@ -33,8 +33,8 @@ export function GuideView({ guide }: { guide: ImprovementGuide }) {
             <div className="h3 m-0">Focus areas</div>
           </div>
           <div className="space-y-5">
-            {guide.keyIssues.map((issue, i) => (
-              <div key={i} className="pl-4 border-l-2 border-warn/30">
+            {guide.keyIssues.map((issue) => (
+              <div key={issue.joint ?? issue.title} className="pl-4 border-l-2 border-warn/30">
                 <div className="text-base font-semibold text-ink-50">{issue.title}</div>
                 {issue.joint && (
                   <div className="text-xs text-ink-400 mt-0.5">
@@ -77,8 +77,8 @@ export function GuideView({ guide }: { guide: ImprovementGuide }) {
               <div className="h3 m-0">Recommended drills</div>
             </div>
             <ul className="space-y-1">
-              {guide.drills.map((d, i) => (
-                <li key={i} className="text-sm text-ink-100 flex gap-2">
+              {guide.drills.map((d) => (
+                <li key={d} className="text-sm text-ink-100 flex gap-2">
                   <span className="text-accent-400 mt-1">→</span>
                   {d}
                 </li>
@@ -93,8 +93,8 @@ export function GuideView({ guide }: { guide: ImprovementGuide }) {
               <div className="h3 m-0">Mental cues</div>
             </div>
             <ul className="space-y-1">
-              {guide.cues.map((c, i) => (
-                <li key={i} className="text-sm text-ink-100 italic">
+              {guide.cues.map((c) => (
+                <li key={c} className="text-sm text-ink-100 italic">
                   "{c}"
                 </li>
               ))}

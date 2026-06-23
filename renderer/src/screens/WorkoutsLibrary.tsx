@@ -64,7 +64,7 @@ export function WorkoutsLibrary() {
         <div className="grid gap-4">
           {filtered.map((w) => (
             <div key={w.id} className="relative">
-              <WorkoutCard workout={w.workout} saved onSave={() => setConfirmId(w.id)} />
+              <WorkoutCard workout={w.workout} saved />
               <div className="absolute top-5 right-36 text-[11px] text-ink-400 flex gap-1">
                 {w.tags.map((t) => (
                   <span key={t} className="chip">
