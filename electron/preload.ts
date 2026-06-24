@@ -20,6 +20,25 @@ const api: AppApi = {
   setSettings: (s: Partial<AppSettings>) => ipcRenderer.invoke("settings:set", s),
 
   openExternal: (url: string) => ipcRenderer.invoke("shell:open", url),
+
+  // The host OS family, so the renderer can pick platform-correct window chrome:
+  // it draws its own caption buttons on Windows/Linux (no native title bar) and
+  // defers to the native traffic lights on macOS.
+  platform: process.platform,
+
+  window: {
+    // Fire-and-forget actions — no payload crosses the boundary, so there is
+    // nothing to validate; the main process resolves the sender's own window.
+    minimize: () => ipcRenderer.send("window:minimize"),
+    toggleMaximize: () => ipcRenderer.send("window:toggle-maximize"),
+    close: () => ipcRenderer.send("window:close"),
+    isMaximized: () => ipcRenderer.invoke("window:is-maximized"),
+    onMaximizeChange: (cb: (isMaximized: boolean) => void) => {
+      const listener = (_e: unknown, isMaximized: boolean) => cb(isMaximized);
+      ipcRenderer.on("window:maximize-changed", listener);
+      return () => ipcRenderer.removeListener("window:maximize-changed", listener);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld("app", api);

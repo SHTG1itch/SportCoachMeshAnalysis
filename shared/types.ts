@@ -205,6 +205,25 @@ export interface SavedWorkout {
 
 // ---- IPC contract (preload-exposed API) ----
 
+/** Host OS family, surfaced to the renderer so it can choose platform-correct
+ * window chrome: custom min/max/close controls on Windows & Linux (which have no
+ * native title bar in this frameless window), native traffic lights on macOS. */
+export type HostPlatform = "darwin" | "win32" | "linux" | string;
+
+/** Controls for the frameless application window. The window has no native title
+ * bar on Windows/Linux, so the renderer draws its own caption buttons and drives
+ * them through these methods. */
+export interface WindowControlsApi {
+  minimize(): void;
+  /** Maximize if restored, restore if maximized. */
+  toggleMaximize(): void;
+  close(): void;
+  isMaximized(): Promise<boolean>;
+  /** Subscribe to maximize/unmaximize (including OS-driven, e.g. snap or
+   * double-click on the drag region). Returns an unsubscribe function. */
+  onMaximizeChange(cb: (isMaximized: boolean) => void): () => void;
+}
+
 export interface AppApi {
   // Analysis persistence
   saveAnalysis(record: AnalysisRecord): Promise<void>;
@@ -223,6 +242,10 @@ export interface AppApi {
 
   // Utility
   openExternal(url: string): Promise<void>;
+
+  // Window chrome (frameless window — see WindowControlsApi)
+  platform: HostPlatform;
+  window: WindowControlsApi;
 }
 
 export interface GuideRequest {

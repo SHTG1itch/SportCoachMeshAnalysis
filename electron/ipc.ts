@@ -1,4 +1,5 @@
-import { ipcMain } from "electron";
+import { ipcMain, BrowserWindow } from "electron";
+import type { IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import {
   deleteAnalysis,
   deleteWorkout,
@@ -112,4 +113,21 @@ export function registerIpcHandlers(): void {
     if (typeof url !== "string") throw new Error("Invalid IPC payload: url");
     await openExternalSafely(url);
   });
+
+  // Window controls for the frameless window. Each message acts on the sender's
+  // OWN window (resolved from the WebContents) rather than a shared reference, so
+  // it stays correct if the app ever opens more than one window. No payload
+  // crosses the boundary, so there is nothing to validate.
+  const senderWindow = (e: IpcMainEvent | IpcMainInvokeEvent): BrowserWindow | null =>
+    BrowserWindow.fromWebContents(e.sender);
+
+  ipcMain.on("window:minimize", (e) => senderWindow(e)?.minimize());
+  ipcMain.on("window:toggle-maximize", (e) => {
+    const w = senderWindow(e);
+    if (!w) return;
+    if (w.isMaximized()) w.unmaximize();
+    else w.maximize();
+  });
+  ipcMain.on("window:close", (e) => senderWindow(e)?.close());
+  ipcMain.handle("window:is-maximized", (e) => senderWindow(e)?.isMaximized() ?? false);
 }

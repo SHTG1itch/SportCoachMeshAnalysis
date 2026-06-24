@@ -40,6 +40,18 @@ const mockApi: AppApi = {
   getSettings: async () => settings,
   setSettings: async (s) => { settings = { ...settings, ...s }; return settings; },
   openExternal: async (url) => { log("openExternal", url); },
+  // The harness runs in a plain browser tab (no Electron window), so window
+  // chrome is stubbed: report a non-mac platform and no-op the controls. The
+  // WindowControls component will render inert caption buttons, which is fine
+  // for a faithful render of the result screen.
+  platform: "browser",
+  window: {
+    minimize: () => log("window.minimize"),
+    toggleMaximize: () => log("window.toggleMaximize"),
+    close: () => log("window.close"),
+    isMaximized: async () => false,
+    onMaximizeChange: () => () => {},
+  },
 };
 window.app = mockApi;
 

@@ -1,10 +1,12 @@
-import { app, BrowserWindow, session } from "electron";
+import { app, BrowserWindow, Menu, session } from "electron";
+import type { MenuItemConstructorOptions } from "electron";
 import * as path from "path";
 import { registerIpcHandlers } from "./ipc";
 import { initDb, closeDb } from "./db";
 import { openExternalSafely } from "./safeOpen";
 
 const isDev = process.env.NODE_ENV === "development";
+const isMac = process.platform === "darwin";
 
 /**
  * Content-Security-Policy for the packaged renderer (file:// origin).
@@ -37,6 +39,42 @@ const PROD_CSP = [
 
 let mainWindow: BrowserWindow | null = null;
 
+/**
+ * Application menu. macOS always gets a real menu (it lives in the global menu
+ * bar, never overlapping the window). On Windows/Linux the bar is auto-hidden
+ * (see `autoHideMenuBar` below) so it never clashes with the custom title bar,
+ * but keeping the menu defined preserves the standard editing accelerators
+ * (copy/paste/undo) and — in development only — reload/devtools shortcuts.
+ */
+function buildMenu(): Menu {
+  const template: MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? ([{ role: "appMenu" }] as MenuItemConstructorOptions[])
+      : []),
+    { role: "editMenu" },
+    {
+      label: "View",
+      submenu: [
+        ...(isDev
+          ? ([
+              { role: "reload" },
+              { role: "forceReload" },
+              { role: "toggleDevTools" },
+              { type: "separator" },
+            ] as MenuItemConstructorOptions[])
+          : []),
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" },
+      ],
+    },
+    { role: "windowMenu" },
+  ];
+  return Menu.buildFromTemplate(template);
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1480,
@@ -45,6 +83,9 @@ function createWindow(): void {
     minHeight: 720,
     backgroundColor: "#0b0d12",
     titleBarStyle: "hiddenInset",
+    // Hide the in-window menu bar on Windows/Linux so it never collides with the
+    // custom title bar; Alt still reveals it and the accelerators stay live.
+    autoHideMenuBar: true,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -58,6 +99,17 @@ function createWindow(): void {
   });
 
   mainWindow.once("ready-to-show", () => mainWindow?.show());
+
+  // Keep the renderer's maximize/restore button glyph in sync with the real
+  // window state, including OS-driven changes (snap, Win+Up, double-clicking the
+  // drag region) that never go through our IPC.
+  const emitMaximizeState = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("window:maximize-changed", mainWindow.isMaximized());
+    }
+  };
+  mainWindow.on("maximize", emitMaximizeState);
+  mainWindow.on("unmaximize", emitMaximizeState);
 
   // Never open a child window in-app; hand web links to the OS browser (scheme-
   // allowlisted) and deny everything else.
@@ -91,6 +143,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   initDb();
   registerIpcHandlers();
+  Menu.setApplicationMenu(buildMenu());
 
   // Attach the production CSP to every response the renderer session loads.
   if (!isDev) {
