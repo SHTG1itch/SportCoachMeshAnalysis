@@ -109,9 +109,18 @@ html.light .divide-white\/5 > * + * {
   .card {
     @apply bg-canvas-700/70 border border-white/5 backdrop-blur-sm rounded-xl shadow-card;
   }
+  /* A single keyboard-focus treatment shared by every interactive control: an
+     accent outline that sits OUTSIDE the element (so it is surface-agnostic and
+     needs no background to read against) and only shows for keyboard users via
+     :focus-visible. */
+  .focus-ring {
+    @apply focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2
+      focus-visible:outline-accent-400;
+  }
   .btn {
     @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm
-      transition-colors duration-150 disabled:opacity-40 disabled:pointer-events-none;
+      transition-colors duration-150 disabled:opacity-40 disabled:pointer-events-none
+      focus-ring;
   }
   .btn-primary {
     @apply btn bg-accent-500 text-white hover:bg-accent-600;
@@ -124,10 +133,16 @@ html.light .divide-white\/5 > * + * {
   }
   .chip {
     @apply inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full
-      border border-white/5 bg-white/[0.03] text-ink-200;
+      border border-white/5 bg-white/[0.03] text-ink-200 focus:outline-none
+      focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-400;
   }
   .chip-active {
     @apply chip bg-accent-500/15 border-accent-500/40 text-accent-400;
+  }
+  /* Selectable chip (used as a toggle button) — gains a hover affordance so it
+     reads as interactive, unlike the static chips used for tags/muscles. */
+  .chip-select {
+    @apply hover:border-accent-500/30 hover:bg-white/[0.06] transition-colors cursor-pointer;
   }
   .h1 {
     @apply text-3xl font-semibold tracking-tight text-ink-50;
@@ -143,7 +158,26 @@ html.light .divide-white\/5 > * + * {
   }
   .input {
     @apply w-full bg-canvas-600 border border-white/5 rounded-lg px-3 py-2 text-sm
-      text-ink-50 placeholder:text-ink-400 focus:outline-none focus:border-accent-500/60;
+      text-ink-50 placeholder:text-ink-400 transition-colors focus:outline-none
+      focus:border-accent-500 focus:ring-2 focus:ring-accent-500/30;
+  }
+  /* Centralized destructive/error surface, previously duplicated as inline
+     `card p-4 border-bad/40 text-sm text-bad bg-bad/5` across screens. */
+  .error-card {
+    @apply card p-4 border-bad/40 bg-bad/5 text-sm text-bad;
+  }
+}
+
+/* Honor the OS "reduce motion" preference: neutralize animations (e.g. the
+   regenerate spinner) and transitions for users who opt out of motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

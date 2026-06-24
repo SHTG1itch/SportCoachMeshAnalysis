@@ -33,7 +33,7 @@ export function History() {
       </div>
 
       {error && (
-        <div className="card p-4 border-bad/40 text-sm text-bad bg-bad/5">{error}</div>
+        <div className="error-card" role="alert">{error}</div>
       )}
 
       {!loaded ? (

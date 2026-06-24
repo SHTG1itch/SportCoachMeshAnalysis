@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
-import { ArrowRight, Play, X, Info } from "lucide-react";
+import { ArrowRight, Play, X, Info, AlertCircle } from "lucide-react";
 import { SPORTS, findSport } from "../lib/sports";
 import { MediaDrop } from "../components/MediaDrop";
 import { runAnalysis, buildRecord, type AnalyzeProgress } from "../lib/analyze";
@@ -112,7 +112,8 @@ export function NewAnalysis() {
                 setSport(s);
                 setShot(s.shots[0]);
               }}
-              className={clsx(sport.id === s.id ? "chip-active" : "chip", "cursor-pointer")}
+              className={clsx(sport.id === s.id ? "chip-active" : "chip chip-select")}
+              aria-pressed={sport.id === s.id}
             >
               {s.name}
             </button>
@@ -124,7 +125,8 @@ export function NewAnalysis() {
             <button
               key={sh}
               onClick={() => setShot(sh)}
-              className={clsx(shot === sh ? "chip-active" : "chip", "cursor-pointer")}
+              className={clsx(shot === sh ? "chip-active" : "chip chip-select")}
+              aria-pressed={shot === sh}
             >
               {sh}
             </button>
@@ -161,7 +163,13 @@ export function NewAnalysis() {
       </section>
 
       {error && (
-        <div className="card p-4 border-bad/40 text-sm text-bad bg-bad/5">{error}</div>
+        <div className="error-card flex items-start gap-3" role="alert">
+          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+          <div>
+            <div className="font-medium">Analysis failed</div>
+            <div className="text-bad/80">{error}</div>
+          </div>
+        </div>
       )}
 
       {progress && (

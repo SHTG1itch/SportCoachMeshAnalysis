@@ -221,7 +221,8 @@ export function AnalysisResult({
             onClick={() => setTab(t.id)}
             onKeyDown={(e) => onTabKeyDown(e, i)}
             className={clsx(
-              "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
+              "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t",
+              "focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-400",
               tab === t.id
                 ? "border-accent-500 text-ink-50"
                 : "border-transparent text-ink-400 hover:text-ink-100",
@@ -237,7 +238,7 @@ export function AnalysisResult({
         id={`panel-${tab}`}
         aria-labelledby={`tab-${tab}`}
         tabIndex={0}
-        className="focus:outline-none"
+        className="rounded-lg focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-400"
       >
       {tab === "summary" && (
         <div className="grid grid-cols-2 gap-6">

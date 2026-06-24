@@ -65,7 +65,8 @@ export function MeshCompare({ mesh }: { mesh: MeshComparison }) {
             value={idx}
             onChange={(e) => setIdx(Number(e.target.value))}
             aria-label="Scrub through the motion"
-            className="w-full accent-accent-500 cursor-pointer"
+            aria-valuetext={`Pose ${idx + 1} of ${n}${idx === clamp(mesh.keyIndex) ? " (contact)" : ""}`}
+            className="w-full accent-accent-500 cursor-pointer rounded focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-400"
           />
           <div className="flex justify-between text-[11px] text-ink-500">
             <span>Start</span>

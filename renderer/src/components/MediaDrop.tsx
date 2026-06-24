@@ -72,6 +72,9 @@ export function MediaDrop({ label, accept, file, onChange, hint }: Props) {
     <div className="flex-1">
       <div className="label mb-2">{label}</div>
       <div
+        role="button"
+        tabIndex={0}
+        aria-label={file ? `Replace ${label} file` : `Upload ${label} file`}
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -79,8 +82,15 @@ export function MediaDrop({ label, accept, file, onChange, hint }: Props) {
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
         className={clsx(
           "cursor-pointer relative card overflow-hidden h-56 flex items-center justify-center transition-colors",
+          "focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-400",
           dragOver && "border-accent-500/60 bg-accent-500/5",
         )}
       >
@@ -114,7 +124,7 @@ export function MediaDrop({ label, accept, file, onChange, hint }: Props) {
               e.stopPropagation();
               handleFile(null);
             }}
-            className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 hover:bg-black/80 text-ink-100 flex items-center justify-center"
+            className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 hover:bg-bad text-white flex items-center justify-center transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             title="Remove"
             aria-label={`Remove ${label} file`}
           >
