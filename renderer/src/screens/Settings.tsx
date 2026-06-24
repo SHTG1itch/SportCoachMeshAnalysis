@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Save, ShieldCheck } from "lucide-react";
+import clsx from "clsx";
+import { Check, Info, Save, ShieldCheck } from "lucide-react";
 import { useStore } from "../store";
+import { APP_VERSION } from "../version";
 
 export function Settings() {
   const settings = useStore((s) => s.settings);
@@ -72,15 +74,49 @@ export function Settings() {
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-2">
-          {saved && (
-            <div className="text-xs text-ok flex items-center gap-1">
-              <Check size={12} /> Saved
-            </div>
-          )}
+          <div
+            role="status"
+            aria-live="polite"
+            className={clsx(
+              "text-xs text-ok flex items-center gap-1 transition-opacity duration-300",
+              saved ? "opacity-100" : "opacity-0",
+            )}
+          >
+            {saved && (
+              <>
+                <Check size={12} /> Saved
+              </>
+            )}
+          </div>
           <button className="btn-primary" onClick={save}>
             <Save size={14} /> Save settings
           </button>
         </div>
+      </div>
+
+      <div className="card p-6 space-y-3">
+        <div className="flex items-center gap-2">
+          <Info size={18} className="text-accent-400" />
+          <div className="font-medium text-ink-50">About</div>
+        </div>
+        <dl className="text-sm">
+          <div className="flex items-center justify-between py-1.5 border-b border-white/5">
+            <dt className="text-ink-400">Application</dt>
+            <dd className="text-ink-200">Sport Coach — Mesh Analysis</dd>
+          </div>
+          <div className="flex items-center justify-between py-1.5 border-b border-white/5">
+            <dt className="text-ink-400">Version</dt>
+            <dd className="text-ink-200 tabular-nums">{APP_VERSION}</dd>
+          </div>
+          <div className="flex items-center justify-between py-1.5 border-b border-white/5">
+            <dt className="text-ink-400">Pose model</dt>
+            <dd className="text-ink-200">MediaPipe BlazePose (heavy)</dd>
+          </div>
+          <div className="flex items-center justify-between py-1.5">
+            <dt className="text-ink-400">Data location</dt>
+            <dd className="text-ink-200">On this device only</dd>
+          </div>
+        </dl>
       </div>
     </div>
   );

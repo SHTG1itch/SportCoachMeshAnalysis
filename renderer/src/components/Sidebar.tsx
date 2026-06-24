@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type Route } from "../store";
+import { APP_VERSION } from "../version";
 
 // On macOS the frameless window keeps its native traffic-light buttons in the
 // top-left, which would sit on top of the logo; nudge the logo right to clear
@@ -69,7 +70,7 @@ export function Sidebar() {
         })}
       </nav>
       <div className="p-4 text-[11px] text-ink-400 border-t border-white/5">
-        v0.1 · 3D pose from your device — nothing leaves until you ask.
+        v{APP_VERSION} · 3D pose from your device — nothing leaves until you ask.
       </div>
     </aside>
   );

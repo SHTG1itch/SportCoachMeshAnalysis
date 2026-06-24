@@ -60,6 +60,21 @@ export function NewAnalysis() {
     abortRef.current?.abort();
   };
 
+  // While an analysis is running, Esc stops it — a long (multi-minute) job
+  // shouldn't require reaching for the mouse to abort. The listener is only
+  // attached during a run, so it never interferes with normal navigation.
+  useEffect(() => {
+    if (!running) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        abortRef.current?.abort();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [running]);
+
   const start = async () => {
     if (!proFile || !userFile) return;
     const controller = new AbortController();
@@ -190,8 +205,17 @@ export function NewAnalysis() {
       )}
 
       <div className="flex items-center justify-end gap-3">
+        {!running && (!proFile || !userFile) && (
+          <div className="text-xs text-ink-400 mr-auto">
+            Add both a professional reference and your own video to run the analysis.
+          </div>
+        )}
         {running ? (
-          <button onClick={cancel} className="btn-subtle text-bad hover:text-bad">
+          <button
+            onClick={cancel}
+            className="btn-subtle text-bad hover:text-bad"
+            title="Stop analysis (Esc)"
+          >
             <X size={14} /> Stop analysis
           </button>
         ) : (

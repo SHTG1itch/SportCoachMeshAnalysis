@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useStore } from "../store";
-import { Trash2, X } from "lucide-react";
+import { Clock, Plus, Trash2, X } from "lucide-react";
 
 export function History() {
   const analyses = useStore((s) => s.analyses);
@@ -39,8 +39,17 @@ export function History() {
       {!loaded ? (
         <div className="card p-8 text-center text-sm text-ink-400">Loading…</div>
       ) : analyses.length === 0 ? (
-        <div className="card p-8 text-center text-sm text-ink-400">
-          No analyses yet.
+        <div className="card p-10 flex flex-col items-center gap-3 text-center">
+          <div className="h-11 w-11 rounded-full bg-white/5 flex items-center justify-center text-ink-400">
+            <Clock size={20} />
+          </div>
+          <div className="text-sm text-ink-400 max-w-sm">
+            No analyses yet. Compare your technique to a pro's and your runs will
+            show up here.
+          </div>
+          <button onClick={() => go({ name: "new" })} className="btn-primary mt-1">
+            <Plus size={14} /> New analysis
+          </button>
         </div>
       ) : (
         <div className="card divide-y divide-white/5">
@@ -58,27 +67,28 @@ export function History() {
                 )}
                 <button
                   onClick={() => go({ name: "analysis", record: a, from: "history" })}
-                  className="flex-1 text-left"
+                  className="flex-1 min-w-0 text-left rounded-lg focus-ring"
                 >
-                  <div className="text-sm font-medium text-ink-50">
+                  <div className="text-sm font-medium text-ink-50 truncate">
                     {a.report.sport.name} · {a.shot}
                   </div>
                   <div className="text-xs text-ink-400 mt-0.5">
                     {new Date(a.createdAt).toLocaleString()}
                   </div>
                 </button>
-                <div className="text-sm tabular-nums text-ink-200">{sim}%</div>
+                <div className="text-sm tabular-nums text-ink-200 shrink-0">{sim}%</div>
                 {confirming ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-bad/30 bg-bad/10 px-2.5 py-1 shrink-0">
+                    <span className="text-xs text-bad">Delete?</span>
                     <button
                       onClick={() => del(a.id)}
-                      className="text-xs font-medium text-bad hover:underline"
+                      className="text-xs font-medium text-bad hover:underline rounded focus-ring"
                     >
-                      Confirm delete
+                      Confirm
                     </button>
                     <button
                       onClick={() => setConfirmId(null)}
-                      className="text-ink-400 hover:text-ink-100"
+                      className="text-ink-400 hover:text-ink-100 rounded focus-ring"
                       aria-label="Cancel delete"
                     >
                       <X size={14} />
@@ -87,7 +97,7 @@ export function History() {
                 ) : (
                   <button
                     onClick={() => setConfirmId(a.id)}
-                    className="text-ink-400 hover:text-bad"
+                    className="text-ink-400 hover:text-bad rounded p-1 shrink-0 focus-ring"
                     aria-label={`Delete ${a.report.sport.name} ${a.shot} analysis`}
                     title="Delete analysis"
                   >

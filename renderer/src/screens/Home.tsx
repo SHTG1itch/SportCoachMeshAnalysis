@@ -69,7 +69,7 @@ export function Home() {
                 <li key={a.id}>
                   <button
                     onClick={() => go({ name: "analysis", record: a, from: "home" })}
-                    className="w-full flex items-center justify-between gap-3 text-left rounded-lg px-3 py-2 hover:bg-white/5"
+                    className="w-full flex items-center justify-between gap-3 text-left rounded-lg px-3 py-2 hover:bg-white/5 transition-colors focus-ring"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       {a.thumbnailDataUrl && (
@@ -93,6 +93,16 @@ export function Home() {
                   </button>
                 </li>
               ))}
+              {analyses.length > 5 && (
+                <li className="pt-1">
+                  <button
+                    onClick={() => go({ name: "history" })}
+                    className="w-full text-center text-xs text-accent-400 hover:text-accent-300 rounded-lg py-1.5 focus-ring"
+                  >
+                    View all {analyses.length} analyses
+                  </button>
+                </li>
+              )}
             </ul>
           )}
         </div>
