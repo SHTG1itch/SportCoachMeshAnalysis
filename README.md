@@ -5,6 +5,134 @@ performing the same motion. The app runs 3D pose estimation on both, aligns the
 motions in time, compares every joint frame-by-frame, and produces a coaching
 guide plus saveable workout plans that target the specific differences.
 
+Everything runs on your machine. There is no account, no API key, and nothing
+about your footage is uploaded (see "Network use").
+
+## Using the app
+
+The interface is a single window with a left navigation rail and six screens.
+
+### Home
+
+The landing screen. It opens with a one-line pitch and two primary actions —
+"New analysis" and "My workouts" — followed by:
+
+- A **sport quick-pick** grid (the most common sports). Selecting a card jumps
+  straight into New Analysis with that sport pre-selected; "Open full picker"
+  goes to New Analysis with the complete list.
+- **Recent analyses** — your five most recent runs, each with a small skeleton
+  thumbnail of your contact-moment pose, the sport and shot, the timestamp, and
+  the similarity score. When you have more than five, a "View all" link jumps to
+  History.
+- **Saved workouts** — the most recent training plans you have saved.
+
+### New Analysis
+
+A three-step form:
+
+1. **Sport** — pick from the chip list (Tennis, Basketball, Golf, Baseball /
+   Softball, Soccer, Boxing, Volleyball, Swimming, or Custom for anything else).
+2. **Shot / motion** — the chips update to the chosen sport's motions.
+3. **Upload media** — two drop zones: a professional reference (image or short
+   clip) and a video of you performing the same motion. Each zone accepts drag
+   and drop or click/keyboard to browse, validates the file type immediately,
+   previews the chosen media, and shows the file name and size. An inline tip
+   explains how to film for the best result (side-on, whole body in frame, one
+   clean rep, steady camera, good lighting, matched camera angle).
+
+The "Run analysis" button stays disabled until both clips are present (with an
+inline hint saying so). While a run is in progress a labelled progress bar
+reports the live stage and percentage; you can stop it from the button or by
+pressing **Esc**. The run is detached from the screen, so navigating away does
+not cancel it — it still saves and appears in History.
+
+### Analysis Result
+
+Opens automatically when a run finishes, or from Home/History. The header shows:
+
+- A large **overall similarity** percentage, colour-coded (green / amber / red).
+- The sport and shot, the comparison mode (sequence DTW vs single-frame), a
+  **per-frame similarity ribbon** (labelled with similarity on the y-axis and
+  motion progress on the x-axis), and — when relevant — a mirrored-comparison
+  note and a low-pose-detection confidence caveat.
+
+Below the header, five keyboard-navigable tabs (arrow keys move between them):
+
+- **Summary** — the detected phases (with the biggest delta per phase) and the
+  top joint differences.
+- **Skeleton** — a scrubbable, side-by-side reconstruction of the pro's and your
+  3D skeletons, time-aligned to the same moment, defaulting to contact/release
+  with a "Jump to contact" shortcut.
+- **Joint breakdown** — every compared joint with a significance chip, the pro
+  vs your mean angle, a magnitude bar, and a plain-language "more/less than pro"
+  line.
+- **Coaching guide** — an overview, what you are doing well, focus areas (each
+  with the measured mesh difference, what drives it, the fix to match the pro,
+  and the muscle groups to train), recommended drills, and in-the-moment cues.
+- **Workouts** — the generated training plans as expandable cards you can save.
+
+You can regenerate the guide and workouts, or delete the analysis (two-step
+confirm).
+
+### Workout Library
+
+Every workout you have saved, searchable by sport, shot, or focus. Each card
+shows difficulty, duration, and context tags, expands to the full warm-up / main
+set / cool-down, and can be removed (two-step confirm). Empty and no-results
+states are spelled out.
+
+### History
+
+A reverse-chronological list of every run, each with its skeleton thumbnail,
+sport, shot, timestamp, and similarity. Open one to return to its result screen,
+or delete it (two-step confirm). All runs stay on the device.
+
+### Settings
+
+Theme (dark or light), an explanation of the on-device, no-key privacy model,
+and an About panel (application name, version, pose model, and where data is
+stored). Saving shows a brief, screen-reader-announced confirmation.
+
+## Desktop window and chrome
+
+The window is frameless with a custom title bar, so its chrome matches the app
+theme on every platform:
+
+- **Window controls.** On Windows and Linux the app draws its own
+  minimize / maximize-restore / close caption buttons at the top-right of the
+  title bar (theme-aware, with the conventional red close hover). The
+  maximize/restore glyph tracks the real window state, including OS-driven
+  changes such as snap layouts, the maximize shortcut, or double-clicking the
+  drag bar. On macOS the app defers to the native traffic lights and offsets the
+  sidebar logo so they do not overlap it.
+- **Moving the window.** Drag the title bar (the logo strip and the top bar are
+  drag regions; the buttons are not). Double-clicking the drag bar toggles
+  maximize.
+- **Application menu.** Auto-hidden on Windows and Linux so it never clashes with
+  the custom title bar (Alt still reveals it), with the standard editing
+  accelerators (copy / paste / undo) always available and reload / dev-tools
+  shortcuts present only in development. macOS gets the usual global menu bar.
+
+## Design system, theming, and accessibility
+
+- **Tokens and themes.** The entire palette (canvas surfaces, ink text, accent,
+  and ok / warn / bad status colours) is defined as CSS variables and consumed
+  through Tailwind, so dark and light themes are a runtime variable swap rather
+  than duplicated styles. Shared component classes (`card`, `btn` variants,
+  `chip`, `input`, `error-card`, the heading and label scales, and a single
+  `focus-ring` treatment) keep the screens consistent.
+- **Keyboard and screen-reader support.** Every interactive control has a
+  visible `:focus-visible` ring; the result tabs use a proper
+  tablist/tab/tabpanel structure with arrow-key navigation; the skeleton
+  scrubber exposes a live frame position; errors use `role="alert"` and the
+  settings save uses an `aria-live` status; the media drop zones are operable by
+  keyboard; and toggles report their pressed state.
+- **Motion.** A `prefers-reduced-motion` rule neutralizes animations (such as the
+  regenerate spinner) and transitions for users who opt out of motion.
+- **Responsiveness.** Multi-column layouts collapse to fewer columns as the
+  window narrows (down to the 1100x720 minimum), and the result tab strip scrolls
+  rather than overflowing.
+
 ## What it does, precisely
 
 1. **3D pose extraction** (per frame) — MediaPipe BlazePose GHUM (heavy model),
@@ -95,12 +223,17 @@ guide plus saveable workout plans that target the specific differences.
 
 ## Stack
 
-- **Electron 33** shell, frameless window with custom title bar.
-- **Renderer**: React 18 + Vite + Tailwind. Pose extraction, normalization,
-  joint-angle math, DTW alignment, and comparison all run here in TypeScript —
-  no Python required.
+- **Electron 33** shell, frameless window with a custom title bar, theme-aware
+  caption buttons on Windows/Linux, and an auto-hidden application menu. The
+  context-isolated, sandboxed preload exposes a single namespaced `window.app`
+  bridge (persistence, settings, and window controls).
+- **Renderer**: React 18 + Vite + Tailwind, with Zustand for app state and
+  `lucide-react` for icons. Pose extraction, normalization, joint-angle math,
+  DTW alignment, and comparison all run here in TypeScript — no Python required.
 - **Main**: Node. `better-sqlite3` for local storage only. The IPC bridge is the
-  only seam between renderer and disk — there is no network seam.
+  only seam between renderer and disk — there is no network seam. Every IPC
+  payload is validated at the trust boundary before it reaches the database, and
+  the window-control messages act on the sender's own window.
 - **Coaching engine**: a dependency-free, deterministic biomechanics rule engine
   (`renderer/src/lib/coach.ts`). No LLM, no API key, no account.
 - **ML model**: `@mediapipe/tasks-vision` (PoseLandmarker, heavy float16).
@@ -118,7 +251,7 @@ and the built `dist/` in prod.
 ```bash
 npm run build     # typecheck + vite build + electron tsc
 npm run start     # runs Electron against the built bundle
-npm run test      # vitest — 116 unit tests across vec / angles / dtw / normalize / prepare / handedness / landmarker / render / compare / coach (plus 6 gated real-footage evals, skipped by default)
+npm run test      # vitest — 131 unit tests across vec / angles / dtw / normalize / prepare / handedness / phases / landmarker / render / compare / coach / multi-sport regression (plus 6 gated real-footage evals, skipped by default)
 npm run typecheck # tsc --noEmit for both tsconfigs
 ```
 
@@ -173,10 +306,11 @@ and number-driven rather than free-form.
     **sport-agnostic** — verified to emit identical mesh-mismatch coaching across
     sports with no sport jargon, and to drive workouts off the muscle groups
     behind each mismatch) plus the skeleton-projection math (head-up
-    auto-orientation under y-DOWN coords) are all unit-tested (116 passing
+    auto-orientation under y-DOWN coords) are all unit-tested (131 passing
     Vitest tests).
   - Renderer + Electron both typecheck clean; renderer builds clean through
-    Vite.
+    Vite (the production build transforms and bundles every UI component, so a
+    broken screen, class, or import fails the build).
   - The real analysis engine was validated on actual tennis footage (an amateur
     forehand vs. Novak Djokovic court-level practice, pulled from YouTube) via a
     browser harness that runs the live `compare()` + coaching pipeline on
@@ -200,9 +334,15 @@ and number-driven rather than free-form.
 ## Source layout
 
 ```
-electron/           main process (IPC, SQLite — local only, no network)
+electron/           main process: IPC + payload validation, window controls and
+                    application menu, SQLite (local only, no network), sandboxed
+                    preload bridge
 renderer/src/
-  App.tsx, main.tsx, styles.css
+  App.tsx, main.tsx
+  styles.css                    Tailwind layers, theme CSS variables (dark +
+                                light), shared component classes, focus-ring,
+                                reduced-motion
+  version.ts                    app version, injected from package.json by Vite
   lib/
     analyze.ts                  end-to-end orchestrator
     coach.ts                    native coaching-guide + workout engine
@@ -220,11 +360,13 @@ renderer/src/
       render.ts                 pure skeleton projection + canvas drawing
       *.test.ts                 unit tests
     sports.ts                   sport metadata registry
-  components/                   Sidebar, TopBar, MediaDrop, PoseOverlay,
+  components/                   Sidebar, TopBar, WindowControls (custom caption
+                                buttons), MediaDrop, PoseOverlay,
                                 MeshCompare (scrubbable pro-vs-you skeletons),
                                 DeltaChart, JointBreakdown, GuideView,
                                 WorkoutCard
   screens/                      Home, NewAnalysis, AnalysisResult,
                                 WorkoutsLibrary, History, Settings
-shared/types.ts                 IPC contract, domain types (guide/workout shapes)
+shared/types.ts                 IPC contract, domain types (guide/workout shapes,
+                                window-control + platform API)
 ```
