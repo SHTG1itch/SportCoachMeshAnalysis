@@ -34,7 +34,10 @@ export function GuideView({ guide }: { guide: ImprovementGuide }) {
           </div>
           <div className="space-y-5">
             {guide.keyIssues.map((issue) => (
-              <div key={issue.joint ?? issue.title} className="pl-4 border-l-2 border-warn/30">
+              <div
+                key={issue.joint ?? issue.title}
+                className="pl-4 pr-3 py-3 rounded-r-lg border-l-2 border-warn/40 bg-warn/[0.04]"
+              >
                 <div className="text-base font-semibold text-ink-50">{issue.title}</div>
                 {issue.joint && (
                   <div className="text-xs text-ink-400 mt-0.5">
@@ -69,7 +72,7 @@ export function GuideView({ guide }: { guide: ImprovementGuide }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {guide.drills.length > 0 && (
           <div className="card p-5">
             <div className="flex items-center gap-2 mb-3">

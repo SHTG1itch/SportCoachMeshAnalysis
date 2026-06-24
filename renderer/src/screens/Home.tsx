@@ -37,12 +37,12 @@ export function Home() {
             Open full picker <ArrowRight size={14} />
           </button>
         </div>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {SPORTS.slice(0, 8).map((s) => (
             <button
               key={s.id}
               onClick={() => go({ name: "new", sportId: s.id })}
-              className="card p-4 text-left hover:border-accent-500/40 transition-colors"
+              className="card p-4 text-left hover:border-accent-500/40 hover:-translate-y-0.5 transition-all focus-ring"
             >
               <div className="text-base font-semibold text-ink-50">{s.name}</div>
               <div className="text-xs text-ink-400 mt-1">{s.shots.length} motions</div>
@@ -51,7 +51,7 @@ export function Home() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-6">
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-3">
             <Timer size={16} className="text-accent-400" />

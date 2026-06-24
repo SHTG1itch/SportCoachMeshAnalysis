@@ -203,7 +203,7 @@ export function AnalysisResult({
       </div>
 
       <div
-        className="flex items-center gap-2 border-b border-white/5"
+        className="flex items-center gap-2 border-b border-white/5 overflow-x-auto"
         role="tablist"
         aria-label="Analysis sections"
       >
@@ -221,7 +221,7 @@ export function AnalysisResult({
             onClick={() => setTab(t.id)}
             onKeyDown={(e) => onTabKeyDown(e, i)}
             className={clsx(
-              "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t",
+              "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t whitespace-nowrap shrink-0",
               "focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-400",
               tab === t.id
                 ? "border-accent-500 text-ink-50"
@@ -241,7 +241,7 @@ export function AnalysisResult({
         className="rounded-lg focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-400"
       >
       {tab === "summary" && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="card p-5">
             <div className="h3 mb-3">Phases detected</div>
             {report.phases.length === 0 ? (

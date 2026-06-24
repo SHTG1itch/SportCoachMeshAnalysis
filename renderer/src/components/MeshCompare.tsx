@@ -41,7 +41,7 @@ export function MeshCompare({ mesh }: { mesh: MeshComparison }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 justify-items-center">
         <SkeletonPanel
           title="Pro"
           frame={pair.pro as PoseFrame}
