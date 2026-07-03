@@ -10,6 +10,7 @@ export function Settings() {
 
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -25,11 +26,18 @@ export function Settings() {
   }, []);
 
   const save = async () => {
-    await window.app.setSettings({ theme });
-    await refreshSettings();
-    setSaved(true);
-    if (savedTimer.current) clearTimeout(savedTimer.current);
-    savedTimer.current = setTimeout(() => setSaved(false), 1500);
+    setSaveError(null);
+    try {
+      await window.app.setSettings({ theme });
+      await refreshSettings();
+      setSaved(true);
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setSaved(false), 1500);
+    } catch (e) {
+      // A rejected save was previously an unhandled rejection and a silently
+      // dead button.
+      setSaveError(e instanceof Error ? e.message : "Could not save settings.");
+    }
   };
 
   return (
@@ -72,6 +80,12 @@ export function Settings() {
             <option value="light">Light</option>
           </select>
         </div>
+
+        {saveError && (
+          <div className="text-xs text-bad" role="alert">
+            {saveError}
+          </div>
+        )}
 
         <div className="flex items-center justify-end gap-3 pt-2">
           <div

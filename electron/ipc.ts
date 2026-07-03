@@ -83,6 +83,9 @@ function validateWorkout(w: unknown): SavedWorkout {
   if (!Array.isArray(w.tags) || w.tags.some((t) => typeof t !== "string")) {
     throw new Error("Invalid IPC payload: tags");
   }
+  // Bound the tag array like every other persisted payload — string-typed but
+  // unbounded tags were the one disk-fill vector this module didn't cap.
+  boundedJson(w.tags, 16 * 1024, "tags");
   if (!isObj(w.workout)) throw new Error("Invalid IPC payload: workout");
   boundedJson(w.workout, MAX_PAYLOAD, "workout");
   return w as unknown as SavedWorkout;

@@ -1,6 +1,7 @@
-import { app, BrowserWindow, Menu, session } from "electron";
+import { app, BrowserWindow, dialog, Menu, session } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
 import * as path from "path";
+import { pathToFileURL } from "url";
 import { registerIpcHandlers } from "./ipc";
 import { initDb, closeDb } from "./db";
 import { openExternalSafely } from "./safeOpen";
@@ -119,17 +120,35 @@ function createWindow(): void {
   });
 
   // Pin the top frame to the app's own content. The first-party renderer never
-  // navigates itself today, but this is standard Electron hardening: it stops any
-  // future stray navigation from replacing the app (with the preload IPC bridge
-  // attached) with off-origin content, and routes such attempts to the browser.
+  // navigates itself today, but Electron's DEFAULT for a file dropped anywhere
+  // on the window is to NAVIGATE to it — so "any file:// URL" was not
+  // hardening: dropping a video outside the drop zones replaced the UI with
+  // the raw file (no way back in prod), and a dropped .html would have run as
+  // a file:// document with the preload bridge attached. Allow exactly the
+  // packaged index.html; route everything else outward.
+  const appIndexUrl = pathToFileURL(
+    path.join(__dirname, "..", "..", "dist", "index.html"),
+  ).href;
   mainWindow.webContents.on("will-navigate", (event, url) => {
     const allowed = isDev
       ? url.startsWith("http://localhost:5173")
-      : url.startsWith("file://");
+      : url === appIndexUrl;
     if (!allowed) {
       event.preventDefault();
       void openExternalSafely(url);
     }
+  });
+
+  // A renderer crash (OOM from the pose WASM on a long clip, GPU process kill)
+  // must not leave a permanently dead window — prod has no Reload menu item.
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error("Renderer process gone:", details.reason, details.exitCode);
+    if (details.reason !== "clean-exit" && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.reload();
+    }
+  });
+  mainWindow.webContents.on("unresponsive", () => {
+    console.warn("Renderer unresponsive (long-running pose extraction?)");
   });
 
   if (isDev) {
@@ -140,8 +159,45 @@ function createWindow(): void {
   }
 }
 
+// Two instances sharing one WAL SQLite file means stale in-memory lists and
+// SQLITE_BUSY surfacing through IPC; focus the existing window instead.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
+// Last-resort logging: an unhandled rejection in main otherwise dies silently
+// (in the packaged app there is no console to see it in).
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception in main process:", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection in main process:", reason);
+});
+
 app.whenReady().then(() => {
-  initDb();
+  if (!gotLock) return; // quitting — the first instance owns the window/DB
+  // A corrupt DB / unwritable userData / broken native module otherwise threw
+  // inside whenReady's then() with no catch — the packaged app just sat
+  // invisible in Task Manager. Fail loudly and quit instead.
+  try {
+    initDb();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    dialog.showErrorBox(
+      "SportCoach could not start",
+      `The local database failed to open:\n\n${msg}\n\nIf this persists, remove the app's data folder and try again.`,
+    );
+    app.quit();
+    return;
+  }
   registerIpcHandlers();
   Menu.setApplicationMenu(buildMenu());
 

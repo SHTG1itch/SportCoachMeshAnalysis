@@ -4,9 +4,41 @@ import * as path from "path";
 import * as fs from "fs";
 import type {
   AnalysisRecord,
+  AnalysisReport,
   AppSettings,
   SavedWorkout,
 } from "../shared/types";
+
+/**
+ * Minimal structural check on a persisted report. JSON.parse succeeding is not
+ * enough: a valid-JSON payload with the wrong shape (record from an
+ * incompatible version, manual edit) previously sailed through the per-row
+ * guard and crashed Home/History on dereference — white-screening the app on
+ * every launch until the DB was deleted, since Home is the default route.
+ * Checks only the fields the screens dereference unconditionally.
+ */
+function isValidReport(r: unknown): r is AnalysisReport {
+  if (typeof r !== "object" || r === null) return false;
+  const rep = r as Record<string, unknown>;
+  const sport = rep.sport as Record<string, unknown> | undefined;
+  return (
+    typeof sport === "object" &&
+    sport !== null &&
+    typeof sport.name === "string" &&
+    typeof rep.overallSimilarity === "number" &&
+    Array.isArray(rep.jointDeltas) &&
+    Array.isArray(rep.phases) &&
+    Array.isArray(rep.workouts)
+  );
+}
+
+function parseReport(payload: string): AnalysisReport {
+  const report: unknown = JSON.parse(payload);
+  if (!isValidReport(report)) {
+    throw new Error("payload is not a valid AnalysisReport");
+  }
+  return report;
+}
 
 let db: Database.Database | null = null;
 
@@ -123,7 +155,7 @@ export function listAnalyses(): AnalysisRecord[] {
         sportId: row.sportId as AnalysisRecord["sportId"],
         shot: row.shot,
         thumbnailDataUrl: row.thumbnail ?? undefined,
-        report: JSON.parse(row.payload),
+        report: parseReport(row.payload),
       });
     } catch (e) {
       console.warn(`Skipping unreadable analysis row ${row.id}:`, e);
@@ -150,14 +182,21 @@ export function getAnalysis(id: string): AnalysisRecord | null {
       }
     | undefined;
   if (!row) return null;
-  return {
-    id: row.id,
-    createdAt: row.createdAt,
-    sportId: row.sportId as AnalysisRecord["sportId"],
-    shot: row.shot,
-    thumbnailDataUrl: row.thumbnail ?? undefined,
-    report: JSON.parse(row.payload),
-  };
+  // Same guarded parse as listAnalyses: one corrupt row should read as
+  // missing, not reject the IPC call.
+  try {
+    return {
+      id: row.id,
+      createdAt: row.createdAt,
+      sportId: row.sportId as AnalysisRecord["sportId"],
+      shot: row.shot,
+      thumbnailDataUrl: row.thumbnail ?? undefined,
+      report: parseReport(row.payload),
+    };
+  } catch (e) {
+    console.warn(`Unreadable analysis row ${row.id}:`, e);
+    return null;
+  }
 }
 
 export function deleteAnalysis(id: string): void {

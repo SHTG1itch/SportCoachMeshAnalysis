@@ -41,7 +41,10 @@ export function MeshCompare({ mesh }: { mesh: MeshComparison }) {
     );
   }
 
-  const pair = mesh.pairs[idx];
+  // Clamp at read time too: if this component ever receives a different mesh
+  // without remounting, a stale idx must degrade to the nearest pose, not an
+  // undefined-pair crash.
+  const pair = mesh.pairs[clamp(idx)];
   const single = n === 1;
 
   return (

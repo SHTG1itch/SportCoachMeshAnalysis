@@ -143,6 +143,7 @@ export function WorkoutCard({ workout, saved, onSave, tags, onRemove }: Props) {
 
       <button
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         className="mt-4 text-sm text-ink-300 hover:text-ink-50 flex items-center gap-1"
       >
         <ChevronDown
