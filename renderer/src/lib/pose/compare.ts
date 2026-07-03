@@ -204,6 +204,44 @@ function standardizedDistance(a: number[], b: number[]): number {
   return Math.sqrt(s / F);
 }
 
+/**
+ * Confidence-weighted variant. Each vector is an angle vector with its
+ * per-feature detection confidence appended (see augmentWithConf); a feature
+ * counts with weight = min(confidence on either side). Without this, the DTW
+ * path, similarity timeline, and headline score trusted every feature at full
+ * strength — a user filmed waist-up (MediaPipe still emits confident-LOOKING
+ * positions for the unseen legs, with low visibility) had four garbage leg
+ * features dragging the score down and distorting the alignment on every
+ * frame, while the per-joint deltas correctly discounted them. The headline
+ * number penalized framing, not technique.
+ *
+ * Falls back to the unweighted distance when the weights carry no signal (all
+ * ~0), so two all-occluded frames still compare rather than reading as
+ * identical.
+ */
+function weightedStandardizedDistance(a: number[], b: number[]): number {
+  const F = FEATURE_SCALE_DEG.length;
+  let s = 0;
+  let W = 0;
+  for (let f = 0; f < F; f++) {
+    const w = Math.min(a[F + f], b[F + f]);
+    if (!(w > 0)) continue;
+    let z = (a[f] - b[f]) / FEATURE_SCALE_DEG[f];
+    if (z > Z_CLAMP) z = Z_CLAMP;
+    else if (z < -Z_CLAMP) z = -Z_CLAMP;
+    s += w * z * z;
+    W += w;
+  }
+  if (!(W > 1e-9)) return standardizedDistance(a, b);
+  return Math.sqrt(s / W);
+}
+
+/** Concatenate each frame's angle vector with its per-feature confidence so a
+ * plain (a, b) distance function can weight features without index context. */
+function augmentWithConf(angles: number[][], conf: number[][]): number[][] {
+  return angles.map((row, i) => row.concat(conf[i] ?? row.map(() => 1)));
+}
+
 function similarityFromDistance(d: number): number {
   return Math.max(0, 1 - Math.min(1, d / SIM_NORM));
 }
@@ -537,20 +575,26 @@ export function compare(input: CompareInput): AnalysisReport {
     // when the two orientations genuinely tie, either choice compares
     // near-symmetric sides and changes almost nothing.
     proSide = detectDominantSide(proFrames, keyType);
-    // Align on the standardized feature distance so no single wide-range joint
-    // dominates the warp path, and so blown-out frames are clamped (see
-    // standardizedDistance). Similarity uses the same metric for consistency.
-    const dtwOpts = { bandRatio: 0.25, distance: standardizedDistance };
-    const resRaw = dtw(proAngles, userAnglesRaw, dtwOpts);
-    const resMir = dtw(proAngles, userAnglesMirrored, dtwOpts);
+    // Align on the confidence-weighted standardized feature distance so no
+    // single wide-range joint dominates the warp path, blown-out frames are
+    // clamped, and features neither clip could actually see don't steer the
+    // alignment or the score (see weightedStandardizedDistance). Similarity
+    // uses the same metric for consistency.
+    const proAug = augmentWithConf(proAngles, proConf);
+    const userAugRaw = augmentWithConf(userAnglesRaw, userConfRaw);
+    const userAugMir = augmentWithConf(userAnglesMirrored, userConfMirrored);
+    const dtwOpts = { bandRatio: 0.25, distance: weightedStandardizedDistance };
+    const resRaw = dtw(proAug, userAugRaw, dtwOpts);
+    const resMir = dtw(proAug, userAugMir, dtwOpts);
     mirrored = resMir.distance < resRaw.distance;
     userSide = mirrored ? opposite(proSide) : proSide;
     userAngles = mirrored ? userAnglesMirrored : userAnglesRaw;
+    const userAug = mirrored ? userAugMir : userAugRaw;
     const userConf = mirrored ? userConfMirrored : userConfRaw;
     const result = mirrored ? resMir : resRaw;
     path = result.path;
     distance = result.distance;
-    similarity = similarityTimeline(proAngles, userAngles, path, "s1", SIM_NORM, standardizedDistance);
+    similarity = similarityTimeline(proAug, userAug, path, "s1", SIM_NORM, weightedStandardizedDistance);
     // Build paired feature arrays along the path.
     pairedPro = path.map(([i]) => proAngles[i]);
     pairedUser = path.map(([, j]) => userAngles[j]);
@@ -560,14 +604,16 @@ export function compare(input: CompareInput): AnalysisReport {
     // handedness from. Try both orientations of the user sequence and keep
     // whichever produces the closer best-frame match — this resolves unknown
     // pro-image handedness directly from the data, with no free parameters.
-    const target = proAngles[0];
+    // The match runs on the confidence-weighted distance so an occluded or
+    // despiked low-visibility user frame can't win the match on garbage.
+    const target = augmentWithConf([proAngles[0]], [proConf[0]])[0];
     const bestMatch = (
       seq: number[][],
     ): { idx: number; dist: number } => {
       let idx = 0;
       let dist = Infinity;
       for (let i = 0; i < seq.length; i++) {
-        const d = standardizedDistance(target, seq[i]);
+        const d = weightedStandardizedDistance(target, seq[i]);
         if (d < dist) {
           dist = d;
           idx = i;
@@ -575,8 +621,8 @@ export function compare(input: CompareInput): AnalysisReport {
       }
       return { idx, dist };
     };
-    const raw = bestMatch(userAnglesRaw);
-    const mir = bestMatch(userAnglesMirrored);
+    const raw = bestMatch(augmentWithConf(userAnglesRaw, userConfRaw));
+    const mir = bestMatch(augmentWithConf(userAnglesMirrored, userConfMirrored));
     mirrored = mir.dist < raw.dist;
     // The pro's inferred side is whatever orientation matched: if mirroring the
     // user matched better, the two have opposite handedness.
