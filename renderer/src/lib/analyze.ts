@@ -71,10 +71,28 @@ export interface AnalyzeInput {
   signal?: AbortSignal;
 }
 
+/**
+ * Single-flight guard. The VIDEO-mode MediaPipe landmarkers are cached
+ * singletons with per-instance monotonic clocks and temporal tracking state
+ * (see landmarker.ts); two extractions interleaving detectForVideo calls on
+ * them feed non-monotonic timestamps and MediaPipe kills BOTH runs with
+ * "Packet timestamp mismatch". A second concurrent analysis must therefore be
+ * refused outright — the UI additionally aborts an in-flight run when its
+ * screen unmounts, so hitting this error requires racing a start against a
+ * still-tearing-down run.
+ */
+let analysisInFlight = false;
+
 export async function runAnalysis(
   input: AnalyzeInput,
   onProgress: (p: AnalyzeProgress) => void,
 ): Promise<AnalysisReport> {
+  if (analysisInFlight) {
+    throw new Error(
+      "Another analysis is still running. Stop it (or wait for it to finish) before starting a new one.",
+    );
+  }
+  analysisInFlight = true;
   // Hold the media handles outside the try so the finally can revoke their object
   // URLs on BOTH the success path and any throw between here and the end — e.g.
   // the "Could not detect a pose" throw below, or an extractVideo/WASM failure.
@@ -187,6 +205,7 @@ export async function runAnalysis(
     onProgress({ stage: "done", message: "Analysis complete", progress: 1 });
     return report;
   } finally {
+    analysisInFlight = false;
     // Release media element resources (revoke object URLs) on every exit path.
     proMedia?.cleanup();
     userMedia?.cleanup();

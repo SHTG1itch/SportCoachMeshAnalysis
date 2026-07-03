@@ -37,7 +37,11 @@ export default function App() {
             {route.name === "home" && <Home />}
             {route.name === "new" && <NewAnalysis />}
             {route.name === "analysis" && (
-              <AnalysisResult record={route.record} backTo={route.from ?? "home"} />
+              <AnalysisResult
+                record={route.record}
+                backTo={route.from ?? "home"}
+                unsaved={route.unsaved}
+              />
             )}
             {route.name === "workouts" && <WorkoutsLibrary />}
             {route.name === "history" && <History />}

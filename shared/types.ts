@@ -49,6 +49,9 @@ export interface JointDelta {
   /** +ve means user is over-rotated vs pro; -ve under-rotated. */
   signedBiasDeg: number;
   significance: "low" | "medium" | "high";
+  /** Mean detection confidence (0..1) backing this joint's paired samples.
+   * Optional: absent on records saved before it was measured. */
+  avgConf?: number;
 }
 
 export interface Handedness {

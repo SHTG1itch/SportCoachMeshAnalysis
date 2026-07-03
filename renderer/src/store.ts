@@ -21,7 +21,9 @@ export type Route =
   | { name: "new"; sportId?: SportId }
   // `from` records where the result was opened from so Back returns there
   // (History → result → Back should go to History, not always Home).
-  | { name: "analysis"; record: AnalysisRecord; from?: "home" | "history" }
+  // `unsaved` marks a freshly computed record whose DB save failed, so the
+  // result screen can warn that it won't appear in History.
+  | { name: "analysis"; record: AnalysisRecord; from?: "home" | "history"; unsaved?: boolean }
   | { name: "workouts" }
   | { name: "history" }
   | { name: "settings" };

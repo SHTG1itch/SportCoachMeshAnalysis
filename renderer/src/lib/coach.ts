@@ -370,7 +370,12 @@ function gapDeg(d: JointDelta): number {
 }
 
 function numericClause(d: JointDelta): string {
-  return `(you ${d.userMeanDeg}° vs pro ${d.proMeanDeg}°, about ${Math.round(gapDeg(d))}° ${d.signedBiasDeg >= 0 ? "more" : "less"})`;
+  // Derive the "about N° more/less" from the same two numbers shown beside it.
+  // gapDeg (the trimmed signed bias) is computed from per-pair differences, so
+  // it need not equal user − pro exactly — quoting it here made the sentence
+  // contradict its own parenthetical (e.g. "you 96° vs pro 90°, about 9° more").
+  const diff = Math.round(Math.abs(d.userMeanDeg - d.proMeanDeg));
+  return `(you ${d.userMeanDeg}° vs pro ${d.proMeanDeg}°, about ${diff}° ${d.signedBiasDeg >= 0 ? "more" : "less"})`;
 }
 
 /** Magnitude bucket so advice scales with how far off the user actually is. */
@@ -431,10 +436,25 @@ function listProse(items: string[]): string {
  * first), so the guide can keep them out of the "strengths" list. Mirrors the
  * target selection in buildWorkouts so a joint can never be praised as a
  * strength while a workout simultaneously calls it a gap to close. */
+/**
+ * A "low" significance can mean two very different things: WELL-MATCHED (small
+ * measured gap) or NOT-SEEN (compare() forces low when the joint's detection
+ * confidence was under the usability threshold). The no-flagged-faults
+ * fallback targets the largest raw gaps — and the largest raw gaps in a
+ * low-confidence report are precisely the detector's worst guesses. Restrict
+ * every fallback pool to joints the cameras actually saw. Records saved before
+ * avgConf existed count as seen (?? 1).
+ */
+const COACHABLE_CONF = 0.3; // mirrors VIS_THRESHOLD in the pose pipeline
+function confidentlySeen(d: JointDelta): boolean {
+  return (d.avgConf ?? 1) >= COACHABLE_CONF;
+}
+
 function workoutTargetGroups(deltas: JointDelta[]): Set<string> {
   const known = deltas.filter((d) => MECHANICS[jointKey(d.joint)]);
   const flagged = known.filter((d) => d.significance !== "low");
-  const pool = (flagged.length > 0 ? flagged : known).slice().sort((a, b) => gapDeg(b) - gapDeg(a));
+  const seen = known.filter(confidentlySeen);
+  const pool = (flagged.length > 0 ? flagged : seen).slice().sort((a, b) => gapDeg(b) - gapDeg(a));
   return new Set(dedupeByGroup(pool).slice(0, 4).map((d) => jointKey(d.joint)));
 }
 
@@ -478,7 +498,11 @@ function buildGuide(req: GuideRequest): ImprovementGuide {
   const issueGroups = new Set(ranked.map((d) => jointKey(d.joint)));
   const targetGroups = workoutTargetGroups(deltas);
   const matched = dedupeByGroup(
-    [...deltas].filter((d) => d.significance === "low").sort((a, b) => gapDeg(a) - gapDeg(b)),
+    // confidentlySeen: a joint whose "low" came from the confidence override
+    // (occluded, not measured) must not be praised as matching the pro.
+    [...deltas]
+      .filter((d) => d.significance === "low" && confidentlySeen(d))
+      .sort((a, b) => gapDeg(a) - gapDeg(b)),
   )
     .filter((d) => !issueGroups.has(jointKey(d.joint)) && !targetGroups.has(jointKey(d.joint)))
     .slice(0, 3)
@@ -553,8 +577,12 @@ function buildWorkouts(req: GuideRequest): Workout[] {
     .filter((d) => d.significance !== "low")
     .sort((a, b) => gapDeg(b) - gapDeg(a));
   // One target per body-part group; if nothing flagged, target the largest
-  // gaps anyway so the workouts are still useful.
-  const targets = dedupeByGroup(flagged.length > 0 ? flagged : known).slice(0, 4);
+  // gaps anyway so the workouts are still useful — but only among joints that
+  // were confidently SEEN (see confidentlySeen): the unflagged largest gaps in
+  // an occluded clip are detector guesses, and workout 3 prescribes literal
+  // angles from them.
+  const seen = known.filter(confidentlySeen);
+  const targets = dedupeByGroup(flagged.length > 0 ? flagged : seen).slice(0, 4);
   const highCount = numericReport.jointDeltas.filter((d) => d.significance === "high").length;
   const difficulty: Workout["difficulty"] =
     highCount >= 2 ? "advanced" : highCount === 1 ? "intermediate" : "beginner";

@@ -23,9 +23,12 @@ const TABS: { id: TabId; label: string }[] = [
 export function AnalysisResult({
   record,
   backTo = "home",
+  unsaved = false,
 }: {
   record: AnalysisRecord;
   backTo?: "home" | "history";
+  /** The record was computed but could not be persisted (DB failure). */
+  unsaved?: boolean;
 }) {
   const go = useStore((s) => s.go);
   const refresh = useStore((s) => s.refresh);
@@ -55,8 +58,15 @@ export function AnalysisResult({
 
   useEffect(() => setCurrent(record), [record]);
 
+  // "Saved" badge: a workout is saved only if THIS analysis saved it. Workout
+  // ids are deterministic per sport/shot, so matching on workout.id alone
+  // marked analysis B's (different) program as saved because analysis A saved
+  // its same-named one.
   const savedIds = useMemo(
-    () => new Set(savedWorkouts.map((s) => s.workout.id)),
+    () =>
+      new Set(
+        savedWorkouts.map((s) => `${s.analysisId ?? ""}:${s.workout.id}`),
+      ),
     [savedWorkouts],
   );
 
@@ -81,6 +91,10 @@ export function AnalysisResult({
       };
       await window.app.saveAnalysis(updated);
       setCurrent(updated);
+      // Sync the store's cached list too — Home/History navigate with records
+      // from it, so without this the regenerated guide vanished when the same
+      // record was reopened (until an app restart).
+      await refresh();
     } catch (e: unknown) {
       setRegenError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -91,7 +105,11 @@ export function AnalysisResult({
   const onSaveWorkout = async (w: Workout) => {
     setWorkoutError(null);
     const saved: SavedWorkout = {
-      id: w.id,
+      // The library row gets its OWN id. Workout ids are deterministic
+      // (sport+shot+kind), and the DB save is an upsert — reusing w.id meant
+      // saving "tennis-forehand-strength" from a second analysis silently
+      // REPLACED the differently-programmed one saved from the first.
+      id: crypto.randomUUID(),
       savedAt: new Date().toISOString(),
       analysisId: current.id,
       workout: w,
@@ -160,6 +178,14 @@ export function AnalysisResult({
           )}
         </div>
       </div>
+
+      {unsaved && (
+        <div className="error-card" role="alert">
+          This analysis could not be saved to your history (a storage error
+          occurred). The results below are complete, but they will be lost when
+          you leave this screen — use "Regenerate guide" to retry saving.
+        </div>
+      )}
 
       <div className="card p-6 flex items-center gap-6">
         <div>
@@ -346,7 +372,7 @@ export function AnalysisResult({
                 <WorkoutCard
                   key={w.id}
                   workout={w}
-                  saved={savedIds.has(w.id)}
+                  saved={savedIds.has(`${current.id}:${w.id}`)}
                   onSave={() => onSaveWorkout(w)}
                 />
               ))}

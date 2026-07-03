@@ -419,6 +419,9 @@ function buildDelta(
     // noise-inflated mean abs delta — see significance(). A joint backed by too
     // little detection confidence is never flagged (its angle is unreliable).
     significance: avgConf < VIS_THRESHOLD ? "low" : significance(Math.abs(signedBias)),
+    // Persisted so the coach can tell a "low" that means WELL-MATCHED from a
+    // "low" that means NOT-SEEN (its fallback must never train unseen joints).
+    avgConf: +avgConf.toFixed(3),
   };
 }
 

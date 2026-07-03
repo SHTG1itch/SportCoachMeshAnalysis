@@ -40,17 +40,20 @@ export function NewAnalysis() {
   const [progress, setProgress] = useState<AnalyzeProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // The analysis runs detached from the React tree (it drives off-DOM <video>
-  // elements), so it keeps going if the user navigates away mid-run. Track
-  // liveness so a completed run that the user abandoned does not yank them off
-  // whatever screen they moved to and back into the result view. The analysis is
-  // still saved, so it shows up in History either way.
+  // Navigating away ABORTS a running analysis. Letting it continue detached
+  // looks friendly but is unsafe: the extraction drives cached singleton
+  // MediaPipe VIDEO landmarkers, so a detached run + a newly started one
+  // interleave detectForVideo calls, feed non-monotonic timestamps, and
+  // MediaPipe kills both ("Packet timestamp mismatch"). A detached run is also
+  // uncancellable — its Stop button and Esc handler died with this screen.
+  // mountedRef still guards the setState calls on the abort path.
   const mountedRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      abortRef.current?.abort();
     };
   }, []);
 
@@ -89,10 +92,19 @@ export function NewAnalysis() {
         setProgress,
       );
       const record = buildRecord(report, userKeyThumbnail(report));
-      await window.app.saveAnalysis(record);
-      await refresh();
+      // A persistence failure must not discard a completed multi-minute
+      // analysis: show the result regardless and let the result screen carry
+      // the "couldn't save" warning (Regenerate guide re-attempts the save).
+      let unsaved = false;
+      try {
+        await window.app.saveAnalysis(record);
+        await refresh();
+      } catch (persistErr) {
+        console.error("Failed to save analysis:", persistErr);
+        unsaved = true;
+      }
       if (!mountedRef.current) return; // user left this screen — don't force-navigate
-      go({ name: "analysis", record });
+      go({ name: "analysis", record, unsaved });
     } catch (e: unknown) {
       // A user-initiated cancel is not an error — just reset the form.
       if (e instanceof DOMException && e.name === "AbortError") {
