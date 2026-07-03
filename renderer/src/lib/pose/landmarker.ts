@@ -112,6 +112,13 @@ function toFrame(result: PoseLandmarkerResult): PoseFrame | null {
   if (!result.worldLandmarks || result.worldLandmarks.length === 0) return null;
   const lms = result.worldLandmarks[0];
   if (!lms || lms.length < 33) return null;
+  // Visibility source: world landmarks first, falling back to the normalized
+  // (image-space) landmarks — tasks-vision populates visibility more reliably
+  // there. A landmark with NO visibility from either source must read as
+  // unreliable (0), never as fully confident: defaulting to 1 silently disabled
+  // every downstream defence (gap-fill, coverage, confidence weighting, draw
+  // gating) for whole clips on builds where the field comes back undefined.
+  const norm = result.landmarks?.[0];
   const out: PoseFrame = [];
   for (let i = 0; i < 33; i++) {
     const l = lms[i];
@@ -119,7 +126,10 @@ function toFrame(result: PoseLandmarkerResult): PoseFrame | null {
       x: l.x,
       y: l.y,
       z: l.z,
-      visibility: (l as { visibility?: number }).visibility ?? 1,
+      visibility:
+        (l as { visibility?: number }).visibility ??
+        (norm?.[i] as { visibility?: number } | undefined)?.visibility ??
+        0,
     };
     out.push(lm);
   }
@@ -170,6 +180,17 @@ const FLIP_PARTNER: number[] = (() => {
  */
 const TTA_AGREE_M = 0.15;
 
+/**
+ * Visibility ceiling for a landmark the two TTA views disagree on. Must sit
+ * BELOW the pipeline's VIS_THRESHOLD (0.3): both views typically report
+ * visibility ≈ 0.99 even when one of them is a depth/left-right flip, so
+ * `min(p, q)` alone stays above every downstream gate and the "treat as
+ * unreliable" intent never materializes. Capping under the threshold makes
+ * gap-filling, coverage, and confidence weighting actually treat the sample as
+ * the detector-can't-reproduce-it signal it is.
+ */
+const TTA_DISAGREE_VIS_CAP = 0.25;
+
 /** Map a detection of the mirrored image back into original-image space:
  * negate x and swap each left landmark with its right partner. */
 function unmirrorFrame(f: PoseFrame): PoseFrame {
@@ -182,10 +203,11 @@ function unmirrorFrame(f: PoseFrame): PoseFrame {
 /**
  * Merge the primary detection with the (already unmirrored) flipped detection.
  *  - Agreement: average position and visibility — bias cancellation.
- *  - Disagreement: keep the primary position but report the pair's minimum
- *    visibility, so the downstream cleanup (gap-fill / despike / confidence
- *    weighting) treats the landmark as unreliable instead of trusting a frame
- *    the detector itself can't reproduce under a mirror.
+ *  - Disagreement: keep the primary position but cap the reported visibility
+ *    below the pipeline's usability threshold (TTA_DISAGREE_VIS_CAP), so the
+ *    downstream cleanup (gap-fill / despike / confidence weighting) actually
+ *    treats the landmark as unreliable instead of trusting a frame the
+ *    detector itself can't reproduce under a mirror.
  */
 function mergeTta(primary: PoseFrame, flipped: PoseFrame): PoseFrame {
   return primary.map((p, i) => {
@@ -199,7 +221,12 @@ function mergeTta(primary: PoseFrame, flipped: PoseFrame): PoseFrame {
         visibility: (p.visibility + q.visibility) / 2,
       };
     }
-    return { x: p.x, y: p.y, z: p.z, visibility: Math.min(p.visibility, q.visibility) };
+    return {
+      x: p.x,
+      y: p.y,
+      z: p.z,
+      visibility: Math.min(p.visibility, q.visibility, TTA_DISAGREE_VIS_CAP),
+    };
   });
 }
 
@@ -304,7 +331,7 @@ export async function extractVideo(
         throw new DOMException("Analysis cancelled", "AbortError");
       }
       const t = (i + 0.5) / total * duration;
-      await seekTo(video, t);
+      await seekTo(video, t, opts.signal);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       let ts = base + Math.round(t * 1000);
       if (ts <= lastTs) ts = lastTs + 1;
@@ -350,25 +377,58 @@ export const __testing = {
   TTA_AGREE_M,
 };
 
-function seekTo(video: HTMLVideoElement, t: number): Promise<void> {
+/** Reject a stuck seek after this long. Generous: even a cold network-backed
+ * decoder seek settles in well under this, so a hit means the pipeline is
+ * genuinely wedged and must fail loudly rather than hang the analysis at a
+ * frozen progress bar forever. */
+const SEEK_TIMEOUT_MS = 15000;
+
+function seekTo(
+  video: HTMLVideoElement,
+  t: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  const target = Math.max(0, Math.min(video.duration - 1e-3, t));
+  // Assigning currentTime its current value never fires `seeked`, so a clip
+  // whose sample times collapse to the same frame (sub-frame durations, repeated
+  // clamping at the ends) would await an event that never comes. Skip the seek
+  // when we are already there.
+  if (Math.abs(video.currentTime - target) < 1 / 120 && video.readyState >= 2) {
+    return Promise.resolve();
+  }
   return new Promise((resolve, reject) => {
     let done = false;
-    const onSeeked = () => {
-      if (done) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = () => {
       done = true;
+      if (timer !== undefined) clearTimeout(timer);
       video.removeEventListener("seeked", onSeeked);
       video.removeEventListener("error", onError);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const onSeeked = () => {
+      if (done) return;
+      cleanup();
       resolve();
     };
     const onError = () => {
       if (done) return;
-      done = true;
-      video.removeEventListener("seeked", onSeeked);
-      video.removeEventListener("error", onError);
+      cleanup();
       reject(new Error("Video seek error"));
+    };
+    const onAbort = () => {
+      if (done) return;
+      cleanup();
+      reject(new DOMException("Analysis cancelled", "AbortError"));
     };
     video.addEventListener("seeked", onSeeked, { once: true });
     video.addEventListener("error", onError, { once: true });
-    video.currentTime = Math.max(0, Math.min(video.duration - 1e-3, t));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    timer = setTimeout(() => {
+      if (done) return;
+      cleanup();
+      reject(new Error("Video seek timed out — the clip may be corrupt or the decoder stalled."));
+    }, SEEK_TIMEOUT_MS);
+    video.currentTime = target;
   });
 }

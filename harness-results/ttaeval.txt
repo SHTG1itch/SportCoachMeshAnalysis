@@ -7,13 +7,13 @@ novak_a    spikes std=4 tta=6   jitter std=39.2mm tta=39.0mm
 ===== RUBRIC: standard extraction =====
 SELF       sim=1.00 high=0 med=0 meanAbsΔ(avg over joints)=0.00° mirrored=false
 MIRROR     sim=1.00 high=0 med=0 meanAbsΔ(avg over joints)=0.00° mirrored=true
-REAL       sim=0.53 high=3 med=5 meanAbsΔ(avg over joints)=19.07° mirrored=true
-CAL        sim=0.60 high=0 med=3 meanAbsΔ(avg over joints)=11.11° mirrored=false
+REAL       sim=0.53 high=3 med=4 meanAbsΔ(avg over joints)=19.07° mirrored=true
+CAL        sim=0.60 high=0 med=1 meanAbsΔ(avg over joints)=11.11° mirrored=false
 
 ===== RUBRIC: TTA extraction =====
 SELF       sim=1.00 high=0 med=0 meanAbsΔ(avg over joints)=0.00° mirrored=false
 MIRROR     sim=1.00 high=0 med=0 meanAbsΔ(avg over joints)=0.00° mirrored=true
-REAL       sim=0.57 high=2 med=6 meanAbsΔ(avg over joints)=16.14° mirrored=true
+REAL       sim=0.57 high=2 med=5 meanAbsΔ(avg over joints)=16.14° mirrored=true
 CAL        sim=0.63 high=0 med=2 meanAbsΔ(avg over joints)=11.19° mirrored=false
 
 --- REAL detail (std) ---
@@ -22,9 +22,9 @@ CAL        sim=0.63 high=0 med=2 meanAbsΔ(avg over joints)=11.19° mirrored=fal
   right_shoulder       bias= -18.48 mean=  19.44  high
   left_hip             bias= -12.47 mean=  12.67  medium
   right_knee           bias= -10.89 mean=  20.34  medium
-  right_elbow          bias= -10.61 mean=  29.35  medium
   right_ankle          bias=   8.77 mean=  18.57  medium
   trunk_lean           bias=  -7.35 mean=   8.35  medium
+  right_elbow          bias= -10.61 mean=  29.35  low
   left_knee            bias=   5.96 mean=   9.60  low
   left_shoulder        bias=  -4.69 mean=  30.18  low
   shoulder_line_tilt   bias=  -4.14 mean=   6.14  low
@@ -37,9 +37,9 @@ CAL        sim=0.63 high=0 med=2 meanAbsΔ(avg over joints)=11.19° mirrored=fal
   left_shoulder        bias= -13.05 mean=  32.17  medium
   left_hip             bias= -11.40 mean=  12.37  medium
   right_knee           bias= -11.21 mean=  21.31  medium
-  left_elbow           bias=  10.79 mean=  15.83  medium
   trunk_lean           bias=  -7.79 mean=   9.11  medium
   left_knee            bias=   7.13 mean=  10.93  medium
+  left_elbow           bias=  10.79 mean=  15.83  low
   right_elbow          bias=  -5.77 mean=  15.30  low
   right_ankle          bias=  -3.59 mean=  14.10  low
   shoulder_line_tilt   bias=  -3.37 mean=   6.73  low

@@ -53,7 +53,7 @@ describe("mergeTta", () => {
     expect(m[L.LEFT_ELBOW].visibility).toBeCloseTo(0.7, 9);
   });
 
-  it("keeps the primary position but the pair's min visibility on disagreement", () => {
+  it("keeps the primary position but caps visibility below the usability threshold on disagreement", () => {
     const a = frame();
     const b = frame();
     a[L.LEFT_ELBOW] = { x: 0.1, y: 1.0, z: 0.0, visibility: 0.9 };
@@ -61,7 +61,13 @@ describe("mergeTta", () => {
     b[L.LEFT_ELBOW] = { x: 0.1 + 3 * TTA_AGREE_M, y: 1.0, z: 0.0, visibility: 0.5 };
     const m = mergeTta(a, b);
     expect(m[L.LEFT_ELBOW].x).toBeCloseTo(0.1, 9);
-    expect(m[L.LEFT_ELBOW].visibility).toBeCloseTo(0.5, 9);
+    // A disagreement means the detector can't reproduce the landmark under a
+    // mirror — the sample must fall below VIS_THRESHOLD (0.3) so gap-filling
+    // and confidence weighting actually treat it as unreliable.
+    expect(m[L.LEFT_ELBOW].visibility).toBeLessThan(0.3);
+    // ...but an already-low pair visibility is preserved, not raised.
+    b[L.LEFT_ELBOW].visibility = 0.1;
+    expect(mergeTta(a, b)[L.LEFT_ELBOW].visibility).toBeCloseTo(0.1, 9);
   });
 
   it("merging two identical frames is the identity", () => {
