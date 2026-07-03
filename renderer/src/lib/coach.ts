@@ -163,16 +163,16 @@ const MECHANICS: Record<string, JointMechanics> = {
   },
   trunk_lean: {
     group: "trunk lean",
-    movement: "how far your torso leans from vertical",
+    movement: "how far your torso leans forward (negative = leaning back)",
     more: {
-      observation: "your torso leans further from vertical than the pro's",
-      correction: "bring your torso more upright to match the pro's posture",
+      observation: "your torso leans further forward than the pro's",
+      correction: "stand a touch taller through the spine to match the pro's posture",
       cue: "stack taller to match",
     },
     less: {
-      observation: "your torso stays more upright than the pro's",
-      correction: "lean your torso a little more from vertical to match the pro's angle",
-      cue: "match the pro's lean",
+      observation: "your torso stays more upright — or drifts back — compared to the pro's forward lean",
+      correction: "hinge your torso a little further forward to match the pro's angle",
+      cue: "match the pro's forward lean",
     },
     drill: "Posture holds set to the pro's torso angle, filmed side-on",
     muscles: ["core", "erector_spinae", "hip_flexors"],

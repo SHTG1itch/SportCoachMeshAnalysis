@@ -137,17 +137,21 @@ describe("computeAngles", () => {
     expect(out[idx]).toBeCloseTo(0, 3);
   });
 
-  it("trunk lean ~ 45° when torso leans forward 45°", () => {
-    // Shoulder midpoint pushed forward (+z) by the same amount it is above hips.
-    const f = mkFrame({
-      [L.LEFT_SHOULDER]: [-0.2, 2, 1],
-      [L.RIGHT_SHOULDER]: [0.2, 2, 1],
-      [L.LEFT_HIP]: [-0.2, 1, 0],
-      [L.RIGHT_HIP]: [0.2, 1, 0],
-    });
-    const out = computeAngles(f);
+  it("trunk lean is SIGNED: +45° leaning forward, -45° leaning backward", () => {
+    // This fixture's athlete has the right hip at +x with up +y, so their
+    // anatomical front is -z (front = up x right). Shoulders pushed to -z is a
+    // forward lean; +z is backward. The sign distinguishes a reverse-spine
+    // fault from the pro's forward hinge — unsigned lean scored them identical.
+    const lean = (z: number) =>
+      mkFrame({
+        [L.LEFT_SHOULDER]: [-0.2, 2, z],
+        [L.RIGHT_SHOULDER]: [0.2, 2, z],
+        [L.LEFT_HIP]: [-0.2, 1, 0],
+        [L.RIGHT_HIP]: [0.2, 1, 0],
+      });
     const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_lean");
-    expect(out[idx]).toBeCloseTo(45, 3);
+    expect(computeAngles(lean(-1))[idx]).toBeCloseTo(45, 3); // forward
+    expect(computeAngles(lean(1))[idx]).toBeCloseTo(-45, 3); // backward
   });
 
   it("trunk lean is invariant to camera yaw (rotation about vertical)", () => {
@@ -203,9 +207,35 @@ describe("computeAngles", () => {
     });
     const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_lean");
     const seq = computeAnglesSequence([f, f, f]);
-    expect(seq[0][idx]).toBeLessThan(20); // small lean — NOT the ~180° sign-flip
+    expect(Math.abs(seq[0][idx])).toBeLessThan(20); // small lean — NOT the ~180° sign-flip
     // The per-frame default (upSign = +1) would mis-read the same data as inverted.
-    expect(computeAngles(f)[idx]).toBeGreaterThan(150);
+    expect(Math.abs(computeAngles(f)[idx])).toBeGreaterThan(150);
+  });
+
+  it("signed trunk lean survives the pipeline's mirror transform (negate x + L/R swap)", () => {
+    // handedness.ts treats trunk features as mirror-invariant (no column sign
+    // flip). That only holds if the sagittal sign is body-relative: mirroring a
+    // forward-leaning athlete must still read forward.
+    const f = mkFrame({
+      [L.LEFT_SHOULDER]: [-0.25, 2, -0.6],
+      [L.RIGHT_SHOULDER]: [0.2, 2.1, -0.7],
+      [L.LEFT_HIP]: [-0.2, 1, 0],
+      [L.RIGHT_HIP]: [0.15, 1.05, 0.05],
+    });
+    const swap: [number, number][] = [
+      [L.LEFT_SHOULDER, L.RIGHT_SHOULDER],
+      [L.LEFT_HIP, L.RIGHT_HIP],
+    ];
+    const mirrored: PoseFrame = f.map((p) => ({ ...p, x: -p.x }));
+    for (const [a, b] of swap) {
+      const tmp = mirrored[a];
+      mirrored[a] = mirrored[b];
+      mirrored[b] = tmp;
+    }
+    const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_lean");
+    const orig = computeAngles(f)[idx];
+    expect(Math.abs(orig)).toBeGreaterThan(10); // fixture genuinely leans
+    expect(computeAngles(mirrored)[idx]).toBeCloseTo(orig, 6);
   });
 
   it("trunk rotation ~ 90° when shoulders rotated 90° to hips", () => {

@@ -1,7 +1,7 @@
 import type { JointName } from "@shared/types";
 import type { PoseFrame } from "./types";
 import { L } from "./types";
-import { angleBetweenDeg, sub, type Vec3 } from "./vec";
+import { angleBetweenDeg, cross, dot, scale, sub, type Vec3 } from "./vec";
 import { VIS_THRESHOLD } from "./prepare";
 
 /** Ordered list of joint features we compute per frame. */
@@ -17,7 +17,7 @@ export const JOINT_FEATURES: { name: JointName; label: string }[] = [
   { name: "left_ankle", label: "Left ankle dorsiflexion" },
   { name: "right_ankle", label: "Right ankle dorsiflexion" },
   { name: "trunk_rotation", label: "Trunk rotation (shoulders vs hips)" },
-  { name: "trunk_lean", label: "Trunk lean (torso vs vertical)" },
+  { name: "trunk_lean", label: "Trunk lean (forward +, back −)" },
   { name: "shoulder_line_tilt", label: "Shoulder line tilt" },
 ];
 
@@ -170,11 +170,16 @@ export function computeAngles(frame: PoseFrame, upSign: number = 1): number[] {
   const hipFlat: Vec3 = { x: hipLine.x, y: 0, z: hipLine.z };
   out.push(angleBetweenDeg(shFlat, hipFlat));
 
-  // Trunk lean: angle between the torso axis (hip midpoint -> shoulder midpoint)
-  // and vertical. 0 = perfectly upright, larger = more forward/lateral lean.
-  // Measured against gravity (vertical), so unlike the old absolute hip yaw this
-  // is independent of camera facing and carries real coaching meaning (posture /
-  // spine angle) that compares validly between two differently-filmed clips.
+  // Trunk lean: SIGNED angle between the torso axis (hip midpoint -> shoulder
+  // midpoint) and vertical. 0 = upright, positive = leaning toward the
+  // athlete's anatomical FRONT, negative = leaning backward. Unsigned lean made
+  // a 25° backward lean read identical to the pro's 25° forward lean — a
+  // classic, high-value fault (reverse spine angle, jump-shot backward drift)
+  // reported as a perfect match. The front direction is body-relative
+  // (hipLine × up), so the sign is invariant to camera facing AND to the
+  // pipeline's mirroring transform (verified: negate-x + L/R swap preserves
+  // dot(torso_horizontal, front)), which is why this feature needs no column
+  // sign-flip in mirrorAngleVector.
   const shMid: Vec3 = {
     x: (getV(L.LEFT_SHOULDER).x + getV(L.RIGHT_SHOULDER).x) / 2,
     y: (getV(L.LEFT_SHOULDER).y + getV(L.RIGHT_SHOULDER).y) / 2,
@@ -185,7 +190,16 @@ export function computeAngles(frame: PoseFrame, upSign: number = 1): number[] {
     y: (getV(L.LEFT_HIP).y + getV(L.RIGHT_HIP).y) / 2,
     z: (getV(L.LEFT_HIP).z + getV(L.RIGHT_HIP).z) / 2,
   };
-  out.push(angleBetweenDeg(sub(shMid, hipMid), vertical));
+  const torsoAxis = sub(shMid, hipMid);
+  const leanMag = angleBetweenDeg(torsoAxis, vertical);
+  // Anatomical front = up × right (right = hipLine, left hip -> right hip);
+  // verified against the East-North-Up identity (facing north, right hand
+  // east: east = north × up ⇒ front = up × right). Sagittal sign = which side
+  // of vertical the torso's horizontal component falls on. A lateral-only lean
+  // has ~0 sagittal component; its sign is then irrelevant (magnitude ~0 dot).
+  const front = cross(vertical, hipLine);
+  const horiz = sub(torsoAxis, scale(vertical, dot(torsoAxis, vertical)));
+  out.push(dot(horiz, front) >= 0 ? leanMag : -leanMag);
 
   // Shoulder line tilt: angle between shoulder line and horizontal.
   // 0 = perfectly level, 90 = vertical.

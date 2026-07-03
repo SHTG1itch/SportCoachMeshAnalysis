@@ -277,8 +277,10 @@ export function repairImplausibleFrames(
   if (n === 0 || TRUNK_LEAN_IDX < 0) return seq;
   const F = seq[0].length;
   const out = seq.map((r) => r.slice());
+  // trunk_lean is signed (forward +, backward -): a depth-flip reads as ±~180,
+  // so plausibility must test the magnitude.
   const plausible = (i: number): boolean =>
-    seq[i][TRUNK_LEAN_IDX] <= TRUNK_LEAN_FLIP_DEG;
+    Math.abs(seq[i][TRUNK_LEAN_IDX]) <= TRUNK_LEAN_FLIP_DEG;
   let anchors: number[] = [];
   for (let i = 0; i < n; i++) {
     if (plausible(i) && (!conf || (conf[i]?.[TRUNK_LEAN_IDX] ?? 0) >= VIS_THRESHOLD)) {
