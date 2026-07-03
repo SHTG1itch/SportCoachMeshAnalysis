@@ -475,7 +475,10 @@ export function compare(input: CompareInput): AnalysisReport {
   // athlete is compared limb-for-limb against a right-handed pro. Mirroring is a
   // column swap on the angle vector — see handedness.ts.
   const keyType = jointType(sport.keyJoint);
-  const userSide = detectDominantSide(userFrames, keyType);
+  // Motion-energy handedness for the user clip — used only by single-frame
+  // mode, where there is no alignment to resolve orientation from directly.
+  // Sequence mode infers the user's side from the best-matching orientation.
+  let userSide = detectDominantSide(userFrames, keyType);
   const userAnglesMirrored = mirrorAnglesSequence(userAnglesRaw);
   const opposite = (s: Side): Side => (s === "right" ? "left" : "right");
 
@@ -501,15 +504,27 @@ export function compare(input: CompareInput): AnalysisReport {
     JOINT_FEATURES.map((_, f) => Math.min(confA[f], confB[f]));
 
   if (mode === "sequence") {
-    // Both clips are videos: dominant side is well-defined from motion energy.
+    // The pro's dominant side comes from motion energy (pro reference clips are
+    // well-framed, single-athlete footage). Whether the USER must be mirrored is
+    // resolved from the match itself — align both orientations and keep the
+    // closer one — exactly like single-frame mode. Motion-energy argmax on the
+    // user clip proved too thin a margin on real footage (near-symmetric
+    // recoveries flip the call and silently mirror a same-handed athlete,
+    // collapsing the comparison); best-of-both-alignments has no such knife edge:
+    // when the two orientations genuinely tie, either choice compares
+    // near-symmetric sides and changes almost nothing.
     proSide = detectDominantSide(proFrames, keyType);
-    mirrored = proSide !== userSide;
-    userAngles = mirrored ? userAnglesMirrored : userAnglesRaw;
-    const userConf = mirrored ? userConfMirrored : userConfRaw;
     // Align on the standardized feature distance so no single wide-range joint
     // dominates the warp path, and so blown-out frames are clamped (see
     // standardizedDistance). Similarity uses the same metric for consistency.
-    const result = dtw(proAngles, userAngles, { bandRatio: 0.25, distance: standardizedDistance });
+    const dtwOpts = { bandRatio: 0.25, distance: standardizedDistance };
+    const resRaw = dtw(proAngles, userAnglesRaw, dtwOpts);
+    const resMir = dtw(proAngles, userAnglesMirrored, dtwOpts);
+    mirrored = resMir.distance < resRaw.distance;
+    userSide = mirrored ? opposite(proSide) : proSide;
+    userAngles = mirrored ? userAnglesMirrored : userAnglesRaw;
+    const userConf = mirrored ? userConfMirrored : userConfRaw;
+    const result = mirrored ? resMir : resRaw;
     path = result.path;
     distance = result.distance;
     similarity = similarityTimeline(proAngles, userAngles, path, "s1", SIM_NORM, standardizedDistance);

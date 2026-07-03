@@ -51,10 +51,10 @@ mode=sequence similarity=1.00 handedness={"pro":"left","user":"left","mirrored":
   shoulder_line_tilt      0.00    0.00   13.66   13.66    0.00  low
   → 0 high, 0 medium
   phases:
-    preparation    [0-48] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
-    load           [49-80] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
-    release        [81-89] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
-    follow_through [90-149] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    preparation    [0-22] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    load           [23-38] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    release        [39-52] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    follow_through [53-149] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
   GUIDE: Your Forehand skeleton closely mirrors the pro at 100% overall mesh similarity — no major mismatches stood out. Keep reinforcing what's working and chase consistency.
   cues: 
     [Mobility & activation] beginner — main: Cable/band triceps extension, Dumbbell biceps curl
@@ -79,10 +79,10 @@ mode=sequence similarity=1.00 handedness={"pro":"left","user":"right","mirrored"
   shoulder_line_tilt      0.00    0.00   13.66   13.66    0.00  low
   → 0 high, 0 medium
   phases:
-    preparation    [0-48] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
-    load           [49-80] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
-    release        [81-89] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
-    follow_through [90-149] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    preparation    [0-22] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    load           [23-38] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    release        [39-52] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
+    follow_through [53-149] top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00
   GUIDE: Your Forehand skeleton closely mirrors the pro at 100% overall mesh similarity — no major mismatches stood out. Keep reinforcing what's working and chase consistency.
   cues: 
     [Mobility & activation] beginner — main: Cable/band triceps extension, Dumbbell biceps curl
@@ -90,36 +90,36 @@ mode=sequence similarity=1.00 handedness={"pro":"left","user":"right","mirrored"
     [Flexibility & position-matching] beginner — main: Match-the-pro hold — elbow, Match-the-pro hold — shoulder, Match-the-pro hold — hip, Overhead triceps stretch, Wall biceps stretch, Kneeling wrist stretch, Cross-body shoulder stretch
 
 ========== REAL: novak(pro) vs timo(user) ==========
-mode=sequence similarity=0.53 handedness={"pro":"left","user":"right","mirrored":true} dtw=1.41 cov={"pro":0.927,"user":1}
+mode=sequence similarity=0.54 handedness={"pro":"left","user":"left","mirrored":false} dtw=1.37 cov={"pro":0.927,"user":1}
   joint                   mean     max     pro    user    bias  sig
-  right_hip              28.30   76.82   44.74   20.53  -23.60  high
-  left_ankle             23.42   42.46  119.61   98.34  -22.08  high
-  right_shoulder         19.44   44.38  147.73  128.78  -18.48  high
-  left_hip               12.67   41.17   24.45   12.44  -12.47  medium
-  right_knee             20.34   57.13   36.27   25.07  -10.89  medium
-  right_ankle            18.57   33.86  113.47  122.09    8.77  medium
-  trunk_lean              8.35   31.04   13.59    6.55   -7.35  medium
-  right_elbow            29.35   53.29   53.92   40.71  -10.61  low
-  left_knee               9.60   23.45   19.40   25.92    5.96  low
-  left_shoulder          30.18   55.24  135.74  129.17   -4.69  low
-  shoulder_line_tilt      6.14   17.19   13.66    9.47   -4.14  low
-  left_elbow             31.23   72.09   57.10   58.38    4.11  low
-  trunk_rotation         10.30   25.28   25.64   22.70   -3.38  low
-  → 3 high, 4 medium
+  right_hip              32.94   78.35   44.50   10.78  -32.94  high
+  right_shoulder         22.22   45.92  149.36  127.96  -19.12  high
+  right_ankle            22.01   46.68  112.88   98.50  -15.51  high
+  right_knee             21.45   49.88   33.47   26.13   -8.76  medium
+  trunk_lean              8.05   27.10   13.59    5.84   -7.72  medium
+  right_elbow            20.14   53.60   50.11   64.62   14.55  low
+  left_elbow             23.81   72.70   56.45   43.00  -13.84  low
+  left_shoulder          18.71   44.27  136.95  124.36  -11.35  low
+  left_hip               11.78   45.51   25.80   20.12   -6.45  low
+  left_knee              10.79   23.63   20.35   26.10    5.50  low
+  shoulder_line_tilt      5.91   18.76   13.66    8.62   -4.77  low
+  trunk_rotation         11.26   26.23   25.64   22.09   -3.75  low
+  left_ankle             11.61   28.52  120.65  122.24    0.72  low
+  → 3 high, 2 medium
   phases:
-    preparation    [0-48] top: right_shoulder Δ35.24, right_hip Δ29.80, left_ankle Δ25.11
-    load           [49-80] top: left_shoulder Δ49.25, right_hip Δ45.81, right_knee Δ35.02
-    release        [81-89] top: right_hip Δ87.97, right_knee Δ86.85, left_shoulder Δ64.60
-    follow_through [90-149] top: left_shoulder Δ31.58, left_ankle Δ20.63, right_shoulder Δ13.67
-  GUIDE: Your Forehand reaches 53% overall mesh similarity to the pro, with 5 joints to bring into line. The biggest is your Hip (24° off). Close each gap by matching the pro's position and training the muscles that drive it.
-    #1 Hip: too little vs the pro — Prioritize this: To match the pro, hinge deeper at the hips to match the pro's loaded position. It shows up most during the release phase — focus your reps there.
-    #2 Ankle: too little vs the pro — Prioritize this: To match the pro, allow more ankle flex so the angle matches the pro. It shows up most during the preparation phase — focus your reps there.
-    #3 Shoulder: too little vs the pro — To match the pro, create more space between your arm and torso to match the pro's arm position. It shows up most during the preparation phase — focus your reps there.
+    preparation    [0-22] top: left_ankle Δ25.98, right_hip Δ22.78, trunk_rotation Δ18.83
+    load           [23-38] top: right_hip Δ43.62, right_elbow Δ18.74, right_ankle Δ18.51
+    release        [39-52] top: left_hip Δ43.73, right_knee Δ26.54, left_ankle Δ24.89
+    follow_through [53-149] top: right_hip Δ37.67, right_shoulder Δ27.67, right_ankle Δ22.34
+  GUIDE: Your Forehand reaches 54% overall mesh similarity to the pro, with 5 joints to bring into line. The biggest is your Hip (33° off). Close each gap by matching the pro's position and training the muscles that drive it.
+    #1 Hip: too little vs the pro — Prioritize this: To match the pro, hinge deeper at the hips to match the pro's loaded position. It shows up most during the load phase — focus your reps there.
+    #2 Shoulder: too little vs the pro — To match the pro, create more space between your arm and torso to match the pro's arm position. It shows up most during the follow through phase — focus your reps there.
+    #3 Ankle: too little vs the pro — To match the pro, allow more ankle flex so the angle matches the pro. It shows up most during the load phase — focus your reps there.
     #4 Knee: too little vs the pro — To match the pro, add more knee bend to match the pro's loaded position. It shows up most during the release phase — focus your reps there.
-  cues: hinge more to match | more ankle flex to match | more arm separation to match | more knee bend to match
+  cues: hinge more to match | more arm separation to match | more ankle flex to match | more knee bend to match
     [Mobility & activation] beginner — main: Hip thrust, Romanian deadlift
-    [Corrective strength] advanced — main: Hip thrust, Romanian deadlift, Lying/hanging leg raises, Copenhagen plank, Single-leg calf raise
-    [Flexibility & position-matching] advanced — main: Match-the-pro hold — hip, Match-the-pro hold — ankle, Match-the-pro hold — shoulder, Figure-4 glute stretch, Standing hamstring stretch, Couch stretch, Frog stretch
+    [Corrective strength] advanced — main: Hip thrust, Romanian deadlift, Lying/hanging leg raises, Copenhagen plank, Landmine press
+    [Flexibility & position-matching] advanced — main: Match-the-pro hold — hip, Match-the-pro hold — shoulder, Match-the-pro hold — ankle, Figure-4 glute stretch, Standing hamstring stretch, Couch stretch, Frog stretch
 
 ========== CALIBRATION: novak(pro) vs novak2 (different pro stroke — expect HIGH) ==========
 mode=sequence similarity=0.60 handedness={"pro":"left","user":"left","mirrored":false} dtw=1.26 cov={"pro":0.927,"user":1}
@@ -139,12 +139,12 @@ mode=sequence similarity=0.60 handedness={"pro":"left","user":"left","mirrored":
   right_shoulder          3.03   11.92  149.72  149.57    0.08  low
   → 0 high, 1 medium
   phases:
-    preparation    [0-48] top: left_elbow Δ96.57, right_elbow Δ16.10, right_knee Δ8.51
-    load           [49-80] top: right_knee Δ25.40, right_ankle Δ15.35, left_knee Δ17.37
-    release        [81-89] top: right_knee Δ89.19, right_hip Δ64.65, left_hip Δ34.38
-    follow_through [90-149] top: right_ankle Δ22.25, left_shoulder Δ13.98, right_hip Δ11.11
+    preparation    [0-22] top: right_ankle Δ14.95, right_elbow Δ8.87, left_hip Δ4.45
+    load           [23-38] top: right_knee Δ19.24, left_elbow Δ81.61, left_ankle Δ7.81
+    release        [39-52] top: left_hip Δ43.10, right_hip Δ24.10, trunk_rotation Δ19.91
+    follow_through [53-149] top: right_ankle Δ20.84, right_knee Δ16.63, right_hip Δ24.28
   GUIDE: Your Forehand reaches 61% overall mesh similarity to the pro, with 1 joint to bring into line. The biggest is your Knee (7° off). Close each gap by matching the pro's position and training the muscles that drive it.
-    #1 Knee: too little vs the pro — To match the pro, add more knee bend to match the pro's loaded position. It shows up most during the release phase — focus your reps there.
+    #1 Knee: too little vs the pro — To match the pro, add more knee bend to match the pro's loaded position. It shows up most during the load phase — focus your reps there.
   cues: more knee bend to match
     [Mobility & activation] beginner — main: Goblet squat, Romanian deadlift
     [Corrective strength] beginner — main: Goblet squat, Romanian deadlift
