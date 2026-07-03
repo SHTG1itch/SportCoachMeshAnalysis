@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { PoseFrame } from "../lib/pose/types";
-import { drawSkeleton } from "../lib/pose/render";
+import { drawSkeleton, type PoseFit } from "../lib/pose/render";
 
 interface Props {
   frame: PoseFrame | null;
@@ -11,6 +11,9 @@ interface Props {
   /** Accessible description of who/what this skeleton shows. */
   label?: string;
   className?: string;
+  /** Shared viewport (scale/center/orientation) so animated or side-by-side
+   * skeletons hold a stable, comparable size. Omitted = auto-fit this frame. */
+  fit?: PoseFit;
 }
 
 /**
@@ -27,6 +30,7 @@ export function PoseOverlay({
   joint = "#7ab6ff",
   label,
   className,
+  fit,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -37,8 +41,8 @@ export function PoseOverlay({
     if (!ctx) return;
     ctx.clearRect(0, 0, width, height);
     if (!frame) return;
-    drawSkeleton(ctx, frame, width, height, { bone, joint });
-  }, [frame, width, height, bone, joint]);
+    drawSkeleton(ctx, frame, width, height, { bone, joint }, fit);
+  }, [frame, width, height, bone, joint, fit]);
 
   return (
     <canvas

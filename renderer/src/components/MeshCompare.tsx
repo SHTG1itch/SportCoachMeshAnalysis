@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { MeshComparison } from "@shared/types";
 import type { PoseFrame } from "../lib/pose/types";
+import { computeFit, type PoseFit } from "../lib/pose/render";
 import { PoseOverlay } from "./PoseOverlay";
 
 const CANVAS_W = 300;
@@ -20,6 +21,17 @@ export function MeshCompare({ mesh }: { mesh: MeshComparison }) {
   // pair would crash the render.
   const clamp = (i: number) => Math.min(Math.max(0, i), Math.max(0, n - 1));
   const [idx, setIdx] = useState(() => clamp(mesh.keyIndex));
+  // ONE viewport across every pose of BOTH athletes: scrubbing must not make a
+  // skeleton pulse in size frame-to-frame, and the pro and user must share a
+  // scale — auto-fitting each canvas independently would visually equalize away
+  // exactly the postural differences (crouch depth, reach) being coached.
+  const fit: PoseFit = useMemo(
+    () =>
+      computeFit(
+        mesh.pairs.flatMap((p) => [p.pro as PoseFrame, p.user as PoseFrame]),
+      ),
+    [mesh],
+  );
 
   if (n === 0) {
     return (
@@ -47,12 +59,14 @@ export function MeshCompare({ mesh }: { mesh: MeshComparison }) {
           frame={pair.pro as PoseFrame}
           bone="#7ab6ff"
           joint="#9cc8ff"
+          fit={fit}
         />
         <SkeletonPanel
           title="You"
           frame={pair.user as PoseFrame}
           bone="#22c38a"
           joint="#5be0ad"
+          fit={fit}
         />
       </div>
 
@@ -96,11 +110,13 @@ function SkeletonPanel({
   frame,
   bone,
   joint,
+  fit,
 }: {
   title: string;
   frame: PoseFrame;
   bone: string;
   joint: string;
+  fit: PoseFit;
 }) {
   return (
     <div className="flex flex-col items-center">
@@ -116,6 +132,7 @@ function SkeletonPanel({
           bone={bone}
           joint={joint}
           label={`${title} skeleton`}
+          fit={fit}
         />
       </div>
     </div>

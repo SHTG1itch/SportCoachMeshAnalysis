@@ -21,63 +21,118 @@ export interface SkeletonColors {
 const DRAW_VIS = 0.3;
 
 /**
+ * A shared projection viewport: the world-space box to fit into the canvas and
+ * the head-up y sign. Computed ONCE over a whole clip (or a pro+user pair set)
+ * so that (a) scrubbing through a motion doesn't make the skeleton pulse or
+ * snap in size as its per-frame bounding box changes, and (b) the pro and user
+ * skeletons share a scale — a compact crouch and a full extension must NOT be
+ * auto-equalized to fill the canvas identically when the whole point is
+ * comparing them.
+ */
+export interface PoseFit {
+  cx: number;
+  cy: number;
+  span: number;
+  /** +1 when smaller y should render toward the top of the canvas, else -1. */
+  sign: number;
+}
+
+/** Accumulate the visible-landmark bounding box of one frame into a box. */
+function growBox(
+  frame: PoseFrame,
+  box: { minX: number; maxX: number; minY: number; maxY: number },
+  gate: boolean,
+): boolean {
+  let any = false;
+  for (const p of frame) {
+    if (gate && (p.visibility ?? 1) < DRAW_VIS) continue;
+    any = true;
+    if (p.x < box.minX) box.minX = p.x;
+    if (p.x > box.maxX) box.maxX = p.x;
+    if (p.y < box.minY) box.minY = p.y;
+    if (p.y > box.maxY) box.maxY = p.y;
+  }
+  return any;
+}
+
+/**
+ * Compute one shared viewport over every frame given (typically all pro AND
+ * user poses of a comparison). The head-up sign is a majority vote across
+ * frames with confidently-visible torso landmarks, so a single inverted or
+ * degenerate frame (mid-dive, occluded torso) can't flip the whole clip's
+ * orientation — deriving it per frame made consecutive scrubber poses render
+ * vertically mirrored the instant shoulders crossed hip height.
+ */
+export function computeFit(frames: PoseFrame[]): PoseFit {
+  const box = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+  let any = false;
+  for (const f of frames) any = growBox(f, box, true) || any;
+  if (!any) {
+    // Nothing reliable anywhere — fall back to the full landmark set so we
+    // still produce sensible numbers rather than Infinity.
+    for (const f of frames) growBox(f, box, false);
+  }
+  let up = 0;
+  let down = 0;
+  for (const f of frames) {
+    const ls = f[L.LEFT_SHOULDER];
+    const rs = f[L.RIGHT_SHOULDER];
+    const lh = f[L.LEFT_HIP];
+    const rh = f[L.RIGHT_HIP];
+    if (!ls || !rs || !lh || !rh) continue;
+    const gated =
+      (ls.visibility ?? 1) < DRAW_VIS ||
+      (rs.visibility ?? 1) < DRAW_VIS ||
+      (lh.visibility ?? 1) < DRAW_VIS ||
+      (rh.visibility ?? 1) < DRAW_VIS;
+    if (gated) continue;
+    const shMidY = (ls.y + rs.y) / 2;
+    const hipMidY = (lh.y + rh.y) / 2;
+    if (shMidY < hipMidY) up++;
+    else if (shMidY > hipMidY) down++;
+  }
+  if (up === 0 && down === 0) {
+    // No confident torso anywhere — vote without the visibility gate.
+    for (const f of frames) {
+      const shMidY = ((f[L.LEFT_SHOULDER]?.y ?? 0) + (f[L.RIGHT_SHOULDER]?.y ?? 0)) / 2;
+      const hipMidY = ((f[L.LEFT_HIP]?.y ?? 0) + (f[L.RIGHT_HIP]?.y ?? 0)) / 2;
+      if (shMidY < hipMidY) up++;
+      else if (shMidY > hipMidY) down++;
+    }
+  }
+  return {
+    cx: (box.minX + box.maxX) / 2,
+    cy: (box.minY + box.maxY) / 2,
+    span: Math.max(box.maxX - box.minX, box.maxY - box.minY, 1e-6),
+    sign: up >= down ? 1 : -1,
+  };
+}
+
+/**
  * Orthographically project a (hip-centered, torso-normalized) world-coordinate
  * pose frame into canvas pixel space.
  *
  * Two things this gets right that a naive `x*width, y*height` does not:
- *  - It auto-fits the visible landmarks' bounding box into the canvas with a
- *    margin, so the skeleton always fills the frame regardless of metric scale.
- *  - It auto-orients head-up from the DATA (nose vs hip midpoint) rather than
- *    assuming a y-up convention. MediaPipe world landmarks are y-DOWN (the head
- *    sits at a smaller/negative y than the hips), so a fixed y-flip would render
- *    every real skeleton upside-down. Deriving the sign per-frame is robust to
- *    either convention.
+ *  - It fits a world-space box into the canvas with a margin, so the skeleton
+ *    always fills the frame regardless of metric scale.
+ *  - It orients head-up from the DATA (shoulders vs hips) rather than assuming
+ *    a y-up convention. MediaPipe world landmarks are y-DOWN (the head sits at
+ *    a smaller/negative y than the hips), so a fixed y-flip would render every
+ *    real skeleton upside-down.
+ *
+ * `fit` supplies a shared viewport (see computeFit). Omitted, the frame is
+ * auto-fitted on its own — correct for a lone thumbnail, wrong for animation
+ * or side-by-side comparison.
  */
 export function projectPose(
   frame: PoseFrame,
   width: number,
   height: number,
   pad = 0.82,
+  fit?: PoseFit,
 ): Point2D[] {
-  // Bounding box over the landmarks we'd actually draw.
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  let any = false;
-  for (const p of frame) {
-    if ((p.visibility ?? 1) < DRAW_VIS) continue;
-    any = true;
-    if (p.x < minX) minX = p.x;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.y > maxY) maxY = p.y;
-  }
-  if (!any) {
-    // Nothing reliable — fall back to the full set so we still produce sensible
-    // numbers rather than Infinity.
-    for (const p of frame) {
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
-    }
-  }
-  const span = Math.max(maxX - minX, maxY - minY, 1e-6);
+  const { cx, cy, span, sign } = fit ?? computeFit([frame]);
   const scale = (Math.min(width, height) * pad) / span;
-  const cx = (minX + maxX) / 2;
-  const cy = (minY + maxY) / 2;
-
-  // Head-up sign, derived from the always-present core landmarks (shoulders sit
-  // toward the head, hips toward the feet) rather than the nose, which can be at
-  // the origin when low-visibility. Pick the sign that projects the shoulder
-  // midpoint ABOVE the hip midpoint on the canvas. This is robust to either the
-  // y-down convention of MediaPipe world coords (head at smaller y) or a y-up
-  // convention, so the skeleton is never rendered upside-down.
-  const shMidY = (frame[L.LEFT_SHOULDER].y + frame[L.RIGHT_SHOULDER].y) / 2;
-  const hipMidY = (frame[L.LEFT_HIP].y + frame[L.RIGHT_HIP].y) / 2;
-  const sign = shMidY < hipMidY ? 1 : -1;
-
   return frame.map((p) => ({
     x: width / 2 + (p.x - cx) * scale,
     y: height / 2 + sign * (p.y - cy) * scale,
@@ -93,12 +148,13 @@ export function drawSkeleton(
   width: number,
   height: number,
   colors: SkeletonColors,
+  fit?: PoseFit,
 ): void {
   if (colors.background) {
     ctx.fillStyle = colors.background;
     ctx.fillRect(0, 0, width, height);
   }
-  const pts = projectPose(frame, width, height);
+  const pts = projectPose(frame, width, height, undefined, fit);
 
   ctx.lineWidth = Math.max(2, Math.round(Math.min(width, height) / 80));
   ctx.strokeStyle = colors.bone;

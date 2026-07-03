@@ -352,16 +352,29 @@ const MAX_MESH_PAIRS = 40;
 
 /** Round a landmark for compact persistence (sub-mm precision is irrelevant for
  * a screen-space skeleton, and full doubles would bloat every saved record). */
-function roundLm(l: Landmark3D): { x: number; y: number; z: number; visibility: number } {
+function roundLm(l: Landmark3D, vis: number): { x: number; y: number; z: number; visibility: number } {
   return {
     x: +l.x.toFixed(4),
     y: +l.y.toFixed(4),
     z: +l.z.toFixed(4),
-    visibility: +(l.visibility ?? 1).toFixed(2),
+    visibility: +vis.toFixed(2),
   };
 }
-function roundPose(f: PoseFrame): MeshPose {
-  return f.map(roundLm);
+/**
+ * Persist a cleaned pose with the RAW frame's visibility. Gap-filling launders
+ * visibility up to anchor level (deliberately, so interpolated geometry stays
+ * usable in the angle math), which means the cleaned frames carry no trace of
+ * which limbs were fabricated. The mesh the user SEES must keep the honest
+ * signal: drawSkeleton hides sub-threshold limbs, and its promise that
+ * "occluded or interpolated limbs aren't drawn as confident lines" only holds
+ * if the persisted visibility is the detector's, not the interpolator's.
+ */
+function roundPose(f: PoseFrame, raw?: PoseFrame): MeshPose {
+  return f.map((lm, i) => {
+    const rawVis = raw?.[i]?.visibility;
+    const vis = Math.min(lm.visibility ?? 1, rawVis ?? 1);
+    return roundLm(lm, vis);
+  });
 }
 
 /**
@@ -376,6 +389,8 @@ function buildMesh(
   mode: "sequence" | "single_frame",
   proFrames: PoseFrame[],
   userFrames: PoseFrame[],
+  rawPro: PoseFrame[],
+  rawUser: PoseFrame[],
   path: [number, number][],
   keyUserFrame: number | null,
   phases: PhaseSummary[],
@@ -384,7 +399,12 @@ function buildMesh(
     if (proFrames.length === 0 || userFrames.length === 0) return null;
     const u = keyUserFrame ?? 0;
     return {
-      pairs: [{ pro: roundPose(proFrames[0]), user: roundPose(userFrames[u] ?? userFrames[0]) }],
+      pairs: [
+        {
+          pro: roundPose(proFrames[0], rawPro[0]),
+          user: roundPose(userFrames[u] ?? userFrames[0], rawUser[u] ?? rawUser[0]),
+        },
+      ],
       keyIndex: 0,
     };
   }
@@ -396,7 +416,10 @@ function buildMesh(
   }
   const pairs = sampled.map((pi) => {
     const [i, j] = path[pi];
-    return { pro: roundPose(proFrames[i]), user: roundPose(userFrames[j]) };
+    return {
+      pro: roundPose(proFrames[i], rawPro[i]),
+      user: roundPose(userFrames[j], rawUser[j]),
+    };
   });
   // Default the scrubber to the contact/release moment (or the load phase) so the
   // user lands on the most coaching-relevant pose; fall back to the middle.
@@ -637,7 +660,16 @@ export function compare(input: CompareInput): AnalysisReport {
           Math.min(1, similarity.reduce((a, b) => a + b, 0) / similarity.length),
         );
 
-  const mesh = buildMesh(mode, proFrames, userFrames, path, keyUserFrame, phases);
+  const mesh = buildMesh(
+    mode,
+    proFrames,
+    userFrames,
+    input.pro.frames,
+    input.user.frames,
+    path,
+    keyUserFrame,
+    phases,
+  );
 
   return {
     version: 1,
