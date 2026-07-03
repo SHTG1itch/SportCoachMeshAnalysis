@@ -261,27 +261,64 @@ const TRUNK_LEAN_FLIP_DEG = 100;
  * left/right swap), so the whole vector is repaired — mirroring how fillGaps
  * repairs missing landmarks. Frames at the clip ends are held from the nearest
  * valid frame (no extrapolation). A no-op for clean clips.
+ *
+ * `conf` (optional, per-frame per-feature confidence) tightens the anchor
+ * test: a frame whose trunk landmarks were below the visibility gate has its
+ * trunk_lean hard-zeroed by computeAngles — trivially "plausible" — and would
+ * otherwise anchor the interpolation with gated zeros. Anchors must be both
+ * physically plausible AND confidently seen (falling back to plausible-only
+ * when nothing clears the bar, so the repair never regresses to giving up).
  */
-export function repairImplausibleFrames(seq: number[][]): number[][] {
+export function repairImplausibleFrames(
+  seq: number[][],
+  conf?: number[][],
+): number[][] {
   const n = seq.length;
   if (n === 0 || TRUNK_LEAN_IDX < 0) return seq;
   const F = seq[0].length;
   const out = seq.map((r) => r.slice());
-  const anchors: number[] = [];
+  const plausible = (i: number): boolean =>
+    seq[i][TRUNK_LEAN_IDX] <= TRUNK_LEAN_FLIP_DEG;
+  let anchors: number[] = [];
   for (let i = 0; i < n; i++) {
-    if (seq[i][TRUNK_LEAN_IDX] <= TRUNK_LEAN_FLIP_DEG) anchors.push(i);
+    if (plausible(i) && (!conf || (conf[i]?.[TRUNK_LEAN_IDX] ?? 0) >= VIS_THRESHOLD)) {
+      anchors.push(i);
+    }
+  }
+  if (conf && anchors.length === 0) {
+    // Nothing both plausible and confident — fall back to plausibility alone.
+    for (let i = 0; i < n; i++) if (plausible(i)) anchors.push(i);
   }
   if (anchors.length === 0 || anchors.length === n) return out; // all bad (give up) or all good
+  // Only IMPLAUSIBLE frames are repaired. A plausible-but-low-confidence frame
+  // between two anchors keeps its measured values (its limb features may be
+  // perfectly good); it just can't serve as an interpolation source.
   const first = anchors[0];
   const last = anchors[anchors.length - 1];
-  for (let f = 0; f < F; f++) {
-    for (let i = 0; i < first; i++) out[i][f] = seq[first][f];
-    for (let i = last + 1; i < n; i++) out[i][f] = seq[last][f];
-    for (let a = 0; a < anchors.length - 1; a++) {
-      const lo = anchors[a];
-      const hi = anchors[a + 1];
-      if (hi - lo <= 1) continue;
-      for (let i = lo + 1; i < hi; i++) {
+  // For each frame, the nearest anchor at or before / at or after it.
+  const prevAnchor = new Array<number>(n).fill(-1);
+  const nextAnchor = new Array<number>(n).fill(-1);
+  {
+    const anchorSet = new Set(anchors);
+    let a = -1;
+    for (let i = 0; i < n; i++) {
+      if (anchorSet.has(i)) a = i;
+      prevAnchor[i] = a;
+    }
+    let b = -1;
+    for (let i = n - 1; i >= 0; i--) {
+      if (anchorSet.has(i)) b = i;
+      nextAnchor[i] = b;
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    if (plausible(i)) continue;
+    const lo = prevAnchor[i];
+    const hi = nextAnchor[i];
+    for (let f = 0; f < F; f++) {
+      if (lo === -1) out[i][f] = seq[first][f]; // before the first anchor: hold it
+      else if (hi === -1) out[i][f] = seq[last][f]; // after the last anchor: hold it
+      else {
         const t = (i - lo) / (hi - lo);
         out[i][f] = seq[lo][f] + (seq[hi][f] - seq[lo][f]) * t;
       }
@@ -542,8 +579,6 @@ export function compare(input: CompareInput): AnalysisReport {
     pro: +detectionCoverage(rawPro, CORE).toFixed(3),
     user: +detectionCoverage(rawUser, CORE).toFixed(3),
   };
-  const proAngles = repairImplausibleFrames(computeAnglesSequence(proFrames));
-  const userAnglesRaw = repairImplausibleFrames(computeAnglesSequence(userFrames));
   // Per-frame, per-feature detection confidence, from the RAW frames so
   // gap-filled (synthetic) samples keep their honest low visibility. Frame
   // counts are preserved by the cleanup steps, so indices line up with the
@@ -552,6 +587,8 @@ export function compare(input: CompareInput): AnalysisReport {
   const proConf = featureConfidenceSequence(rawPro);
   const userConfRaw = featureConfidenceSequence(rawUser);
   const userConfMirrored = mirrorAnglesSequence(userConfRaw);
+  const proAngles = repairImplausibleFrames(computeAnglesSequence(proFrames), proConf);
+  const userAnglesRaw = repairImplausibleFrames(computeAnglesSequence(userFrames), userConfRaw);
 
   // single_frame only for an actual pro IMAGE or a genuinely single-frame clip.
   // A 2-frame video used to be downgraded here too (proAngles.length <= 2),
@@ -641,14 +678,22 @@ export function compare(input: CompareInput): AnalysisReport {
       seq: number[][],
     ): { idx: number; dist: number } => {
       let idx = 0;
-      let dist = Infinity;
+      const dists: number[] = [];
       for (let i = 0; i < seq.length; i++) {
         const d = weightedStandardizedDistance(target, seq[i]);
-        if (d < dist) {
-          dist = d;
-          idx = i;
-        }
+        dists.push(d);
+        if (d < dists[idx]) idx = i;
       }
+      // Score on the mean of the best ~5% of frames (min 1), not the single
+      // best frame. A best-of-N minimum over hundreds of frames is an order
+      // statistic, not an estimate: even an unrelated motion contains ONE frame
+      // that happens to resemble the pro image, which systematically inflated
+      // image-mode scores relative to sequence-mode scores. Averaging a small
+      // top set keeps "the user actually passes through the pro's position"
+      // scoring high while a single lucky frame no longer carries the score.
+      const k = Math.max(1, Math.round(seq.length * 0.05));
+      const best = [...dists].sort((a, b) => a - b).slice(0, k);
+      const dist = best.reduce((a, b) => a + b, 0) / best.length;
       return { idx, dist };
     };
     const raw = bestMatch(augmentWithConf(userAnglesRaw, userConfRaw));
@@ -727,14 +772,21 @@ export function compare(input: CompareInput): AnalysisReport {
   // systematic gap is still surfaced descriptively (see coach worstPhaseFor) to
   // localize a flagged fault, just not used to flag or rank it.
 
-  // Overall similarity: mean of timeline, floored at 0.
-  const overall =
-    similarity.length === 0
-      ? 0
-      : Math.max(
-          0,
-          Math.min(1, similarity.reduce((a, b) => a + b, 0) / similarity.length),
-        );
+  // Overall similarity: blend of the timeline mean and its 10th percentile,
+  // floored at 0. A plain time-average dilutes localized failures — a clip
+  // whose 80 setup frames match at 0.95 but whose 10-frame CONTACT is
+  // completely wrong still averaged ~0.87, hiding exactly the moment that
+  // matters most in a swing. Folding in the worst-decile similarity makes a
+  // localized breakdown register while leaving uniformly-good clips untouched
+  // (mean == p10 == overall for a flat timeline, so self-comparison stays 1.0).
+  let overall = 0;
+  if (similarity.length > 0) {
+    const mean = similarity.reduce((a, b) => a + b, 0) / similarity.length;
+    const p10 = percentile(similarity, 0.1);
+    // 80/20 keeps the score anchored to the validated whole-motion rubric
+    // while still letting a localized breakdown move the headline number.
+    overall = Math.max(0, Math.min(1, 0.8 * mean + 0.2 * p10));
+  }
 
   const mesh = buildMesh(
     mode,
