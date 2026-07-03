@@ -72,6 +72,47 @@ describe("computeAngles", () => {
     expect(out[idx]).toBeCloseTo(0, 3);
   });
 
+  // Direction-pinning tests: these fix the PHYSICAL convention of each metric,
+  // not just its magnitude. The shoulder and ankle conventions were once
+  // inverted relative to their labels — the coaching copy then described both
+  // faults exactly backwards, and no test caught it because none pinned which
+  // way the number grows.
+  it("shoulder abduction GROWS as the arm moves away from the torso", () => {
+    const base = {
+      [L.RIGHT_HIP]: [0, 0, 0] as [number, number, number],
+      [L.LEFT_HIP]: [-0.3, 0, 0] as [number, number, number],
+      [L.RIGHT_SHOULDER]: [0, 1, 0] as [number, number, number],
+      [L.LEFT_SHOULDER]: [-0.3, 1, 0] as [number, number, number],
+    };
+    const idx = JOINT_FEATURES.findIndex((j) => j.name === "right_shoulder");
+    // Arm hanging straight down at the side (elbow below shoulder).
+    const atSide = computeAngles(mkFrame({ ...base, [L.RIGHT_ELBOW]: [0, 0.6, 0] }));
+    // Arm raised horizontally.
+    const horizontal = computeAngles(mkFrame({ ...base, [L.RIGHT_ELBOW]: [0.4, 1, 0] }));
+    // Arm overhead.
+    const overhead = computeAngles(mkFrame({ ...base, [L.RIGHT_ELBOW]: [0, 1.4, 0] }));
+    expect(atSide[idx]).toBeCloseTo(0, 3);
+    expect(horizontal[idx]).toBeCloseTo(90, 3);
+    expect(overhead[idx]).toBeCloseTo(180, 3);
+  });
+
+  it("ankle dorsiflexion GROWS as the shin closes over the toes", () => {
+    const base = {
+      [L.RIGHT_ANKLE]: [0, 0, 0] as [number, number, number],
+      [L.RIGHT_FOOT_INDEX]: [0.3, 0, 0] as [number, number, number],
+    };
+    const idx = JOINT_FEATURES.findIndex((j) => j.name === "right_ankle");
+    // Neutral: shin vertical over the ankle, foot flat forward.
+    const neutral = computeAngles(mkFrame({ ...base, [L.RIGHT_KNEE]: [0, 1, 0] }));
+    // Dorsiflexed: knee travels forward over the toes.
+    const dorsi = computeAngles(mkFrame({ ...base, [L.RIGHT_KNEE]: [0.5, 0.87, 0] }));
+    // Plantarflexed: shin behind the ankle (pointed toes).
+    const plantar = computeAngles(mkFrame({ ...base, [L.RIGHT_KNEE]: [-0.5, 0.87, 0] }));
+    expect(neutral[idx]).toBeCloseTo(90, 3);
+    expect(dorsi[idx]).toBeGreaterThan(neutral[idx]);
+    expect(plantar[idx]).toBeLessThan(neutral[idx]);
+  });
+
   it("trunk rotation ~ 0 when shoulders parallel to hips", () => {
     const f = mkFrame({
       [L.LEFT_SHOULDER]: [-1, 2, 0],

@@ -4,14 +4,14 @@
   mean angles (per-frame computeAngles | clip-aware computeAnglesSequence):
     left_elbow              48.82 |    48.82
     right_elbow             61.79 |    61.79
-    left_shoulder          126.63 |   126.63
-    right_shoulder         139.90 |   139.90
+    left_shoulder           53.37 |    53.37
+    right_shoulder          40.10 |    40.10
     left_hip                32.77 |    32.77
     right_hip               50.54 |    50.54
     left_knee               27.98 |    27.98
     right_knee              41.66 |    41.66
-    left_ankle             123.24 |   123.24
-    right_ankle            113.02 |   113.02
+    left_ankle              56.76 |    56.76
+    right_ankle             66.98 |    66.98
     trunk_rotation          28.75 |    28.75
     trunk_lean             153.97 |    26.03
     shoulder_line_tilt      15.33 |    15.33
@@ -21,14 +21,14 @@
   mean angles (per-frame computeAngles | clip-aware computeAnglesSequence):
     left_elbow              61.94 |    61.94
     right_elbow             82.67 |    82.67
-    left_shoulder          131.44 |   131.44
-    right_shoulder         136.63 |   136.63
+    left_shoulder           48.56 |    48.56
+    right_shoulder          43.37 |    43.37
     left_hip                14.72 |    14.72
     right_hip               10.07 |    10.07
     left_knee               24.12 |    24.12
     right_knee              28.90 |    28.90
-    left_ankle             123.00 |   123.00
-    right_ankle            101.18 |   101.18
+    left_ankle              57.00 |    57.00
+    right_ankle             78.82 |    78.82
     trunk_rotation          20.68 |    20.68
     trunk_lean             174.17 |     5.83
     shoulder_line_tilt       8.54 |     8.54
@@ -38,14 +38,14 @@ mode=sequence similarity=1.00 handedness={"pro":"left","user":"left","mirrored":
   joint                   mean     max     pro    user    bias  sig
   left_elbow              0.00    0.00   60.12   60.12    0.00  low
   right_elbow             0.00    0.00   50.30   50.30    0.00  low
-  left_shoulder           0.00    0.00  135.97  135.97    0.00  low
-  right_shoulder          0.00    0.00  149.10  149.10    0.00  low
+  left_shoulder           0.00    0.00   44.03   44.03    0.00  low
+  right_shoulder          0.00    0.00   30.90   30.90    0.00  low
   left_hip                0.00    0.00   24.04   24.04    0.00  low
   right_hip               0.00    0.00   43.88   43.88    0.00  low
   left_knee               0.00    0.00   19.04   19.04    0.00  low
   right_knee              0.00    0.00   34.25   34.25    0.00  low
-  left_ankle              0.00    0.00  119.68  119.68    0.00  low
-  right_ankle             0.00    0.00  112.53  112.53    0.00  low
+  left_ankle              0.00    0.00   60.32   60.32    0.00  low
+  right_ankle             0.00    0.00   67.47   67.47    0.00  low
   trunk_rotation          0.00    0.00   25.64   25.64    0.00  low
   trunk_lean              0.00    0.00   13.59   13.59    0.00  low
   shoulder_line_tilt      0.00    0.00   13.66   13.66    0.00  low
@@ -66,14 +66,14 @@ mode=sequence similarity=1.00 handedness={"pro":"left","user":"right","mirrored"
   joint                   mean     max     pro    user    bias  sig
   left_elbow              0.00    0.00   60.12   60.12    0.00  low
   right_elbow             0.00    0.00   50.30   50.30    0.00  low
-  left_shoulder           0.00    0.00  135.97  135.97    0.00  low
-  right_shoulder          0.00    0.00  149.10  149.10    0.00  low
+  left_shoulder           0.00    0.00   44.03   44.03    0.00  low
+  right_shoulder          0.00    0.00   30.90   30.90    0.00  low
   left_hip                0.00    0.00   24.04   24.04    0.00  low
   right_hip               0.00    0.00   43.88   43.88    0.00  low
   left_knee               0.00    0.00   19.04   19.04    0.00  low
   right_knee              0.00    0.00   34.25   34.25    0.00  low
-  left_ankle              0.00    0.00  119.68  119.68    0.00  low
-  right_ankle             0.00    0.00  112.53  112.53    0.00  low
+  left_ankle              0.00    0.00   60.32   60.32    0.00  low
+  right_ankle             0.00    0.00   67.47   67.47    0.00  low
   trunk_rotation          0.00    0.00   25.64   25.64    0.00  low
   trunk_lean              0.00    0.00   13.59   13.59    0.00  low
   shoulder_line_tilt      0.00    0.00   13.66   13.66    0.00  low
@@ -93,18 +93,18 @@ mode=sequence similarity=1.00 handedness={"pro":"left","user":"right","mirrored"
 mode=sequence similarity=0.54 handedness={"pro":"left","user":"left","mirrored":false} dtw=1.37 cov={"pro":0.927,"user":1}
   joint                   mean     max     pro    user    bias  sig
   right_hip              32.94   78.35   44.50   10.78  -32.94  high
-  right_shoulder         22.22   45.92  149.36  127.96  -19.12  high
-  right_ankle            22.01   46.68  112.88   98.50  -15.51  high
+  right_shoulder         22.22   45.92   30.64   52.04   19.12  high
+  right_ankle            22.01   46.68   67.12   81.50   15.51  high
   right_knee             21.45   49.88   33.47   26.13   -8.76  medium
   trunk_lean              8.05   27.10   13.59    5.84   -7.72  medium
   right_elbow            20.14   53.60   50.11   64.62   14.55  low
   left_elbow             23.81   72.70   56.45   43.00  -13.84  low
-  left_shoulder          18.71   44.27  136.95  124.36  -11.35  low
+  left_shoulder          18.71   44.27   43.05   55.64   11.35  low
   left_hip               11.78   45.51   25.80   20.12   -6.45  low
   left_knee              10.79   23.63   20.35   26.10    5.50  low
   shoulder_line_tilt      5.91   18.76   13.66    8.62   -4.77  low
   trunk_rotation         11.26   26.23   25.64   22.09   -3.75  low
-  left_ankle             11.61   28.52  120.65  122.24    0.72  low
+  left_ankle             11.61   28.52   59.35   57.76   -0.72  low
   → 3 high, 2 medium
   phases:
     preparation    [0-22] top: left_ankle Δ25.98, right_hip Δ22.78, trunk_rotation Δ18.83
@@ -113,10 +113,10 @@ mode=sequence similarity=0.54 handedness={"pro":"left","user":"left","mirrored":
     follow_through [53-149] top: right_hip Δ37.67, right_shoulder Δ27.67, right_ankle Δ22.34
   GUIDE: Your Forehand reaches 54% overall mesh similarity to the pro, with 5 joints to bring into line. The biggest is your Hip (33° off). Close each gap by matching the pro's position and training the muscles that drive it.
     #1 Hip: too little vs the pro — Prioritize this: To match the pro, hinge deeper at the hips to match the pro's loaded position. It shows up most during the load phase — focus your reps there.
-    #2 Shoulder: too little vs the pro — To match the pro, create more space between your arm and torso to match the pro's arm position. It shows up most during the follow through phase — focus your reps there.
-    #3 Ankle: too little vs the pro — To match the pro, allow more ankle flex so the angle matches the pro. It shows up most during the load phase — focus your reps there.
+    #2 Shoulder: too much vs the pro — To match the pro, bring your upper arm closer to your body to match the pro. It shows up most during the follow through phase — focus your reps there.
+    #3 Ankle: too much vs the pro — To match the pro, let the shin sit back a little so the ankle angle matches the pro. It shows up most during the load phase — focus your reps there.
     #4 Knee: too little vs the pro — To match the pro, add more knee bend to match the pro's loaded position. It shows up most during the release phase — focus your reps there.
-  cues: hinge more to match | more arm separation to match | more ankle flex to match | more knee bend to match
+  cues: hinge more to match | arm in closer to match | ease the ankle to match | more knee bend to match
     [Mobility & activation] beginner — main: Hip thrust, Romanian deadlift
     [Corrective strength] advanced — main: Hip thrust, Romanian deadlift, Lying/hanging leg raises, Copenhagen plank, Landmine press
     [Flexibility & position-matching] advanced — main: Match-the-pro hold — hip, Match-the-pro hold — shoulder, Match-the-pro hold — ankle, Figure-4 glute stretch, Standing hamstring stretch, Couch stretch, Frog stretch
@@ -127,16 +127,16 @@ mode=sequence similarity=0.60 handedness={"pro":"left","user":"left","mirrored":
   right_knee             12.66   45.61   31.34   23.02   -7.23  medium
   left_elbow             33.27   86.32   58.43   45.74  -10.76  low
   right_elbow            10.24   40.05   51.24   60.67    7.65  low
-  left_ankle              7.76   19.07  118.60  113.98   -3.81  low
+  left_ankle              7.76   19.07   61.40   66.02    3.81  low
   trunk_lean              5.01   21.76   12.60    8.67   -3.34  low
-  right_ankle            17.22   39.46  115.07  111.53   -2.95  low
+  right_ankle            17.22   39.46   64.93   68.47    2.95  low
   trunk_rotation          7.02   18.39   25.06   22.60   -2.76  low
   shoulder_line_tilt      4.35   11.62   13.37   13.14   -0.67  low
   right_hip              15.69   48.95   41.31   41.45   -0.62  low
-  left_shoulder          12.20   40.57  141.82  141.93    0.51  low
+  left_shoulder          12.20   40.57   38.18   38.07   -0.51  low
   left_hip                9.52   30.61   23.42   24.69    0.45  low
   left_knee               6.43   19.50   18.01   17.28    0.24  low
-  right_shoulder          3.03   11.92  149.72  149.57    0.08  low
+  right_shoulder          3.03   11.92   30.28   30.43   -0.08  low
   → 0 high, 1 medium
   phases:
     preparation    [0-22] top: right_ankle Δ14.95, right_elbow Δ8.87, left_hip Δ4.45

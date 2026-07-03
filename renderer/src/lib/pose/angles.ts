@@ -109,11 +109,16 @@ export function computeAngles(frame: PoseFrame, upSign: number = 1): number[] {
   out.push(elbow(L.LEFT_SHOULDER, L.LEFT_ELBOW, L.LEFT_WRIST));
   out.push(elbow(L.RIGHT_SHOULDER, L.RIGHT_ELBOW, L.RIGHT_WRIST));
 
-  // Shoulder abduction: angle between torso axis and upper arm.
+  // Shoulder abduction: how far the upper arm is raised away from the torso.
+  // The raw angle between the torso axis (hip->shoulder, pointing headward) and
+  // the upper arm (shoulder->elbow) is 180° with the arm hanging at the side
+  // and 0° overhead — the OPPOSITE of what "abduction" means. Report 180 - a so
+  // 0° = arm at the side, 90° = horizontal, 180° = overhead: bigger = further
+  // from the torso, matching the label and the coaching copy built on it.
   const shoulderAb = (shoulder: number, hip: number, elbow: number): number => {
     const torso = sub(getV(shoulder), getV(hip));
     const upper = sub(getV(elbow), getV(shoulder));
-    return angleBetweenDeg(torso, upper);
+    return 180 - angleBetweenDeg(torso, upper);
   };
   out.push(shoulderAb(L.LEFT_SHOULDER, L.LEFT_HIP, L.LEFT_ELBOW));
   out.push(shoulderAb(L.RIGHT_SHOULDER, L.RIGHT_HIP, L.RIGHT_ELBOW));
@@ -137,11 +142,16 @@ export function computeAngles(frame: PoseFrame, upSign: number = 1): number[] {
   out.push(knee(L.LEFT_HIP, L.LEFT_KNEE, L.LEFT_ANKLE));
   out.push(knee(L.RIGHT_HIP, L.RIGHT_KNEE, L.RIGHT_ANKLE));
 
-  // Ankle dorsiflexion: angle between shin and foot.
+  // Ankle dorsiflexion: how far the shin closes toward the foot. The raw
+  // shin-foot angle is ~90° neutral and DECREASES as the shin travels over the
+  // toes (dorsiflexion), so reporting it directly made "more" mean plantar-
+  // flexed — the coaching copy then described the fault backwards. Report
+  // 180 - a so the value grows with dorsiflexion (neutral ~90°, shin over toes
+  // > 90°, pointed toes < 90°), matching the label's direction.
   const ankle = (knee: number, ankle: number, foot: number): number => {
     const shin = sub(getV(knee), getV(ankle));
     const footV = sub(getV(foot), getV(ankle));
-    return angleBetweenDeg(shin, footV);
+    return 180 - angleBetweenDeg(shin, footV);
   };
   out.push(ankle(L.LEFT_KNEE, L.LEFT_ANKLE, L.LEFT_FOOT_INDEX));
   out.push(ankle(L.RIGHT_KNEE, L.RIGHT_ANKLE, L.RIGHT_FOOT_INDEX));
