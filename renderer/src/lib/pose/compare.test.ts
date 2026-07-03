@@ -84,6 +84,41 @@ describe("compare", () => {
     expect(report.alignment).toBeNull();
   });
 
+  it("idle pre/post-roll in the user clip barely moves the score (active-window trim)", () => {
+    // A simple "swing": the right wrist sweeps forward and back over 30 frames.
+    const swingFrame = (t: number): PoseFrame => {
+      const f = defaultFrame();
+      const a = Math.sin(t * Math.PI); // 0 -> 1 -> 0
+      f[L.RIGHT_WRIST] = { x: 0.35 + 0.6 * a, y: 0.85 + 0.5 * a, z: 0.2 * a, visibility: 1 };
+      f[L.RIGHT_ELBOW] = { x: 0.3 + 0.3 * a, y: 1.1 + 0.2 * a, z: 0.1 * a, visibility: 1 };
+      return f;
+    };
+    const swing = Array.from({ length: 30 }, (_, i) => swingFrame(i / 29));
+    const idle = () => defaultFrame();
+    // User clip: 45 frames of standing, the same swing, 45 more frames of standing.
+    const padded = [
+      ...Array.from({ length: 45 }, idle),
+      ...swing.map((f) => f.map((l) => ({ ...l }))),
+      ...Array.from({ length: 45 }, idle),
+    ];
+    const tight = compare({
+      sport: SPORT,
+      shot: "Forehand",
+      pro: { frames: swing, fps: 30, kind: "video" },
+      user: { frames: swing.map((f) => f.map((l) => ({ ...l }))), fps: 30 },
+    });
+    const withIdle = compare({
+      sport: SPORT,
+      shot: "Forehand",
+      pro: { frames: swing, fps: 30, kind: "video" },
+      user: { frames: padded, fps: 30 },
+    });
+    // Endpoint-anchored DTW would otherwise cram 90 standing frames against the
+    // pro's swing, collapsing the score and fabricating joint biases.
+    expect(tight.overallSimilarity).toBeGreaterThanOrEqual(0.99);
+    expect(withIdle.overallSimilarity).toBeGreaterThan(0.9);
+  });
+
   it("attaches a downsampled, aligned skeleton mesh for the visual comparison", () => {
     const frames = Array.from({ length: 60 }, () => defaultFrame());
     const report = compare({

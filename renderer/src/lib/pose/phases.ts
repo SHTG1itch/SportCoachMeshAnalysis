@@ -41,6 +41,92 @@ export interface Phase {
  * swinging/striking sports. For sports without a clear peak the phases still
  * partition the sequence — the peak just lands somewhere meaningful.
  */
+/** Smoothed per-frame speed profile of a key landmark (~100 ms window). */
+function smoothedKeySpeed(
+  frames: PoseFrame[],
+  lm: number,
+  fps: number,
+): Float64Array {
+  const n = frames.length;
+  const dt = 1 / Math.max(fps, 1);
+  const speeds = new Float64Array(n);
+  for (let i = 1; i < n; i++) {
+    const a = frames[i - 1][lm];
+    const b = frames[i][lm];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dz = b.z - a.z;
+    speeds[i] = Math.sqrt(dx * dx + dy * dy + dz * dz) / dt;
+  }
+  speeds[0] = speeds[1] ?? 0;
+
+  const w = Math.max(1, Math.round(fps / 10)); // ~100ms window
+  const sm = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    let s = 0;
+    let c = 0;
+    for (let k = i - w; k <= i + w; k++) {
+      if (k >= 0 && k < n) {
+        s += speeds[k];
+        c++;
+      }
+    }
+    sm[i] = s / c;
+  }
+  return sm;
+}
+
+/** A frame is "active" when the key joint moves faster than this fraction of
+ * its peak smoothed speed. Well below any real motion phase (the release scan
+ * uses 50%), so only genuinely idle footage — standing at address, walking
+ * back after the follow-through — falls outside the window. */
+const ACTIVE_SPEED_FRACTION = 0.12;
+/** Keep this much context (seconds) on each side of the active window, so the
+ * preparation's stillness-to-motion transition survives the trim. */
+const ACTIVE_PAD_SEC = 0.35;
+
+/**
+ * The [start, end] frame range in which the motion actually happens.
+ *
+ * Why: DTW is endpoint-anchored — frame 0 of one clip MUST pair with frame 0
+ * of the other. Untrimmed idle pre/post-roll (a user filming 6 s of standing
+ * before a 2 s swing) gets crammed against the other clip's real motion at
+ * full detection confidence, fabricating systematic "standing vs swinging"
+ * joint biases and collapsing the similarity score. Comparing motions, not
+ * recordings, requires both clips cropped to their motion first.
+ *
+ * Conservative by construction: the whole clip is returned when the speed
+ * profile has no usable peak (static pose, unknown key joint, tiny clip) or
+ * when the trim would leave too little signal.
+ */
+export function activeWindow(
+  frames: PoseFrame[],
+  keyJoint: JointName,
+  fps: number,
+): { start: number; end: number } {
+  const n = frames.length;
+  const full = { start: 0, end: n - 1 };
+  if (n < 8) return full;
+  const lm = JOINT_TO_LANDMARK[keyJoint];
+  if (lm === undefined) return full;
+  const sm = smoothedKeySpeed(frames, lm, fps);
+  let peak = 0;
+  for (let i = 0; i < n; i++) if (sm[i] > peak) peak = sm[i];
+  if (!(peak > 0)) return full;
+  const thr = peak * ACTIVE_SPEED_FRACTION;
+  let start = 0;
+  while (start < n && sm[start] < thr) start++;
+  let end = n - 1;
+  while (end > start && sm[end] < thr) end--;
+  const pad = Math.round(ACTIVE_PAD_SEC * Math.max(fps, 1));
+  start = Math.max(0, start - pad);
+  end = Math.min(n - 1, end + pad);
+  // Never trim down to a sliver — a window this short means the "motion" was
+  // noise, not signal, and the full clip is the safer comparison.
+  if (end - start + 1 < Math.max(4, Math.floor(n * 0.1))) return full;
+  return { start, end };
+}
+
 export function detectPhases(
   frames: PoseFrame[],
   keyJoint: JointName,
@@ -56,32 +142,7 @@ export function detectPhases(
     return [{ name: "full", startFrame: 0, endFrame: n - 1 }];
   }
 
-  const dt = 1 / Math.max(fps, 1);
-  const speeds = new Float64Array(n);
-  for (let i = 1; i < n; i++) {
-    const a = frames[i - 1][lm];
-    const b = frames[i][lm];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const dz = b.z - a.z;
-    speeds[i] = Math.sqrt(dx * dx + dy * dy + dz * dz) / dt;
-  }
-  speeds[0] = speeds[1];
-
-  // Smooth.
-  const w = Math.max(1, Math.round(fps / 10)); // ~100ms window
-  const sm = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    let s = 0;
-    let c = 0;
-    for (let k = i - w; k <= i + w; k++) {
-      if (k >= 0 && k < n) {
-        s += speeds[k];
-        c++;
-      }
-    }
-    sm[i] = s / c;
-  }
+  const sm = smoothedKeySpeed(frames, lm, fps);
 
   // Find peak.
   let peak = 0;
@@ -93,16 +154,20 @@ export function detectPhases(
     }
   }
 
-  // Half-peak crossings.
+  // Half-peak crossings. A clip that starts (or ends) mid-swing may never drop
+  // below half-peak on that side — the old code then left releaseStart AT the
+  // peak, which pushed the contact frame itself out of the release window and
+  // into preparation/load (release starts at releaseStart + 1). When no
+  // crossing exists, the release must extend to the clip edge instead.
   const half = peakVal * 0.5;
-  let releaseStart = peak;
+  let releaseStart = -1; // "no crossing": release starts at frame 0
   for (let i = peak; i >= 0; i--) {
     if (sm[i] < half) {
       releaseStart = i;
       break;
     }
   }
-  let releaseEnd = peak;
+  let releaseEnd = n - 1; // "no crossing": release runs to the last frame
   for (let i = peak; i < n; i++) {
     if (sm[i] < half) {
       releaseEnd = i;

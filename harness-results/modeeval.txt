@@ -3,10 +3,10 @@
   SELF novak vs novak (~1.0)   IMAGE=     1.000   VIDEO=     1.000
   MIRROR sim (~1.0)            IMAGE=     1.000   VIDEO=     1.000
   MIRROR mirrored flag (true)  IMAGE=      true   VIDEO=      true
-  REAL novak vs timo sim       IMAGE=     0.564   VIDEO=     0.602
-  REAL #high / #medium         IMAGE=       2/3   VIDEO=       5/1
-  REAL handedness              IMAGE={"pro":"left","user":"left","mirrored":false}   VIDEO={"pro":"left","user":"right","mirrored":true}
-  CALIB novak vs novak2 sim    IMAGE=     0.668   VIDEO=     0.712
-  CALIB #high (expect HIGH)    IMAGE=         0   VIDEO=         1
+  REAL novak vs timo sim       IMAGE=     0.512   VIDEO=     0.496
+  REAL #high / #medium         IMAGE=       3/3   VIDEO=       3/2
+  REAL handedness              IMAGE={"pro":"left","user":"left","mirrored":false}   VIDEO={"pro":"left","user":"left","mirrored":false}
+  CALIB novak vs novak2 sim    IMAGE=     0.614   VIDEO=     0.606
+  CALIB #high (expect HIGH)    IMAGE=         0   VIDEO=         2
 
   SELF > REAL (technique signal preserved): IMAGE true | VIDEO true

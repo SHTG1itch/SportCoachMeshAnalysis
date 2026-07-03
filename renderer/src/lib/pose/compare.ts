@@ -24,7 +24,7 @@ import {
   sidedJoint,
   type Side,
 } from "./handedness";
-import { detectPhases, type Phase } from "./phases";
+import { activeWindow, detectPhases, type Phase } from "./phases";
 import { dtw, similarityTimeline } from "./dtw";
 
 export interface CompareInput {
@@ -505,12 +505,43 @@ export function compare(input: CompareInput): AnalysisReport {
   // Detection coverage is measured on the RAW frames (before gap-filling) so it
   // reflects how much real signal there was vs. how much was interpolated.
   const CORE = [L.LEFT_SHOULDER, L.RIGHT_SHOULDER, L.LEFT_HIP, L.RIGHT_HIP];
-  const coverage = {
-    pro: +detectionCoverage(input.pro.frames, CORE).toFixed(3),
-    user: +detectionCoverage(input.user.frames, CORE).toFixed(3),
+  const keyType = jointType(sport.keyJoint);
+  let rawPro = input.pro.frames;
+  let rawUser = input.user.frames;
+  let proFrames = normalizeAll(smoothFrames(despikeFrames(fillGaps(rawPro))));
+  let userFrames = normalizeAll(smoothFrames(despikeFrames(fillGaps(rawUser))));
+
+  // Crop both clips to their ACTIVE window before anything is compared. DTW is
+  // endpoint-anchored, so idle pre/post-roll in one clip (standing at address,
+  // walking back after the shot) would be crammed against the other clip's real
+  // motion at full detection confidence — fabricating systematic "standing vs
+  // swinging" joint biases and collapsing the score. The window is found from
+  // each clip's own key-joint speed profile and is conservative: clips with no
+  // usable peak come back untouched (see activeWindow). Raw frames are cropped
+  // with the same window so confidence/mesh indices stay aligned.
+  const cropToActive = (
+    frames: PoseFrame[],
+    raw: PoseFrame[],
+    fps: number,
+  ): [PoseFrame[], PoseFrame[]] => {
+    const side = detectDominantSide(frames, keyType);
+    const w = activeWindow(frames, sidedJoint(side, keyType), fps);
+    if (w.start === 0 && w.end === frames.length - 1) return [frames, raw];
+    return [frames.slice(w.start, w.end + 1), raw.slice(w.start, w.end + 1)];
   };
-  const proFrames = normalizeAll(smoothFrames(despikeFrames(fillGaps(input.pro.frames))));
-  const userFrames = normalizeAll(smoothFrames(despikeFrames(fillGaps(input.user.frames))));
+  if (input.pro.kind === "video" && proFrames.length > 1) {
+    [proFrames, rawPro] = cropToActive(proFrames, rawPro, input.pro.fps);
+  }
+  if (userFrames.length > 1) {
+    [userFrames, rawUser] = cropToActive(userFrames, rawUser, input.user.fps);
+  }
+
+  // Detection coverage over the segment actually compared (RAW frames, before
+  // gap-filling, so it reflects real signal vs interpolation).
+  const coverage = {
+    pro: +detectionCoverage(rawPro, CORE).toFixed(3),
+    user: +detectionCoverage(rawUser, CORE).toFixed(3),
+  };
   const proAngles = repairImplausibleFrames(computeAnglesSequence(proFrames));
   const userAnglesRaw = repairImplausibleFrames(computeAnglesSequence(userFrames));
   // Per-frame, per-feature detection confidence, from the RAW frames so
@@ -518,8 +549,8 @@ export function compare(input: CompareInput): AnalysisReport {
   // counts are preserved by the cleanup steps, so indices line up with the
   // angle sequences. Confidence vectors mirror with the same column swaps as
   // the angle vectors.
-  const proConf = featureConfidenceSequence(input.pro.frames);
-  const userConfRaw = featureConfidenceSequence(input.user.frames);
+  const proConf = featureConfidenceSequence(rawPro);
+  const userConfRaw = featureConfidenceSequence(rawUser);
   const userConfMirrored = mirrorAnglesSequence(userConfRaw);
 
   // single_frame only for an actual pro IMAGE or a genuinely single-frame clip.
@@ -535,7 +566,6 @@ export function compare(input: CompareInput): AnalysisReport {
   // mirror the user's angle features to the pro's convention so a left-handed
   // athlete is compared limb-for-limb against a right-handed pro. Mirroring is a
   // column swap on the angle vector — see handedness.ts.
-  const keyType = jointType(sport.keyJoint);
   // Motion-energy handedness for the user clip — used only by single-frame
   // mode, where there is no alignment to resolve orientation from directly.
   // Sequence mode infers the user's side from the best-matching orientation.
@@ -710,8 +740,8 @@ export function compare(input: CompareInput): AnalysisReport {
     mode,
     proFrames,
     userFrames,
-    input.pro.frames,
-    input.user.frames,
+    rawPro,
+    rawUser,
     path,
     keyUserFrame,
     phases,

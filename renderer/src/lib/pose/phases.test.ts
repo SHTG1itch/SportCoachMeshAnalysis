@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectPhases, type Phase } from "./phases";
+import { activeWindow, detectPhases, type Phase } from "./phases";
 import type { PoseFrame } from "./types";
 import { L } from "./types";
 
@@ -63,5 +63,55 @@ describe("detectPhases", () => {
     // trunk_rotation is a valid JointName but maps to no single landmark.
     const phases = detectPhases(frames, "trunk_rotation", 30);
     expect(phases).toEqual([{ name: "full", startFrame: 0, endFrame: 9 }]);
+  });
+
+  it("keeps the velocity peak inside the release phase even when the clip starts mid-swing", () => {
+    // Speed is ABOVE half-peak from frame 0 (no crossing before the peak): the
+    // old scan left releaseStart at the peak, pushing the contact frame itself
+    // into preparation. Release must instead extend to the clip start.
+    const xs: number[] = [];
+    let x = 0;
+    for (let i = 0; i < 20; i++) {
+      x += 10 + 10 * Math.exp(-((i - 2) ** 2) / 4); // peak near frame 2, never < half before it
+      xs.push(x);
+    }
+    const phases = detectPhases(xs.map(frameWithWrist), "right_wrist", 30);
+    assertPartition(phases, 20);
+    const release = phases.find((p) => p.name === "release");
+    expect(release).toBeDefined();
+    expect(release!.startFrame).toBe(0); // contains the early peak
+  });
+});
+
+describe("activeWindow", () => {
+  /** Idle, burst of motion, idle: wrist parked, then sweeping, then parked. */
+  function paddedClip(idleBefore: number, active: number, idleAfter: number): PoseFrame[] {
+    const frames: PoseFrame[] = [];
+    for (let i = 0; i < idleBefore; i++) frames.push(frameWithWrist(0));
+    for (let i = 0; i < active; i++) frames.push(frameWithWrist(Math.sin((i / active) * Math.PI) * 5));
+    for (let i = 0; i < idleAfter; i++) frames.push(frameWithWrist(0));
+    return frames;
+  }
+
+  it("crops long idle pre/post-roll around the motion", () => {
+    const w = activeWindow(paddedClip(60, 30, 60), "right_wrist", 30);
+    expect(w.start).toBeGreaterThan(30); // most of the 60 idle lead frames dropped
+    expect(w.end).toBeLessThan(120); // most of the 60 idle tail frames dropped
+    expect(w.start).toBeLessThanOrEqual(60); // but none of the motion itself
+    expect(w.end).toBeGreaterThanOrEqual(89);
+  });
+
+  it("returns the whole clip when there is no idle footage", () => {
+    const frames = paddedClip(0, 40, 0);
+    const w = activeWindow(frames, "right_wrist", 30);
+    expect(w.start).toBe(0);
+    expect(w.end).toBe(frames.length - 1);
+  });
+
+  it("returns the whole clip for static footage and tiny clips", () => {
+    const still = Array.from({ length: 30 }, () => frameWithWrist(1));
+    expect(activeWindow(still, "right_wrist", 30)).toEqual({ start: 0, end: 29 });
+    const tiny = paddedClip(2, 3, 2).slice(0, 6);
+    expect(activeWindow(tiny, "right_wrist", 30)).toEqual({ start: 0, end: 5 });
   });
 });
