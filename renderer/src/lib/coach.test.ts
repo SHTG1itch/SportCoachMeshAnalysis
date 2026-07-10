@@ -345,4 +345,95 @@ describe("native coach engine", () => {
     expect(guide.strengths.length).toBeGreaterThan(0);
     expect(workouts.length).toBe(3);
   });
+
+  it("does NOT claim 'closely mirrors the pro' when zero issues coexist with low similarity", () => {
+    // Timing/dynamics mismatch: every bias is small (nothing flagged) but the
+    // similarity is poor. The old summary said "closely mirrors the pro at 42%
+    // overall mesh similarity" — self-contradictory in one sentence.
+    const { guide } = generateGuideAndWorkouts(
+      req({
+        overallSimilarity: 0.42,
+        jointDeltas: [delta("right_elbow", 4, 3, "low"), delta("left_knee", 5, -2, "low")],
+      }),
+    );
+    expect(guide.summary).not.toContain("closely mirrors");
+    expect(guide.summary).toContain("42%");
+    // High similarity + zero issues keeps the earned praise.
+    const good = generateGuideAndWorkouts(
+      req({
+        overallSimilarity: 0.93,
+        jointDeltas: [delta("right_elbow", 2, 1, "low")],
+      }),
+    );
+    expect(good.guide.summary).toContain("closely mirrors");
+  });
+
+  it("tells the user to re-film when no joint was confidently seen", () => {
+    const unseen = (j: JointName): JointDelta => ({ ...delta(j, 25, 20, "low"), avgConf: 0.1 });
+    const { guide, workouts } = generateGuideAndWorkouts(
+      req({
+        overallSimilarity: 0.35,
+        jointDeltas: [unseen("right_elbow"), unseen("left_knee"), unseen("right_hip")],
+      }),
+    );
+    expect(guide.summary.toLowerCase()).toContain("re-film");
+    expect(guide.summary).not.toContain("closely mirrors");
+    // Workouts fall back to a general foundation with real content — no empty
+    // saveable cards with dangling "…mesh gaps: ." focus strings.
+    expect(workouts.length).toBe(3);
+    for (const w of workouts) {
+      expect(w.main.length).toBeGreaterThan(0);
+      expect(w.focus).not.toMatch(/:\s*\./);
+    }
+  });
+
+  it("never praises a joint whose bias cancels but whose per-frame delta is large", () => {
+    // Bias ~0 (early +15° cancels late −15°) yet mean per-frame delta is 8°+.
+    // "Closely matches the pro (within 0°)" misreads noise cancellation as skill.
+    const wobble: JointDelta = { ...delta("left_knee", 12, 0.3, "low") };
+    const { guide } = generateGuideAndWorkouts(
+      req({
+        overallSimilarity: 0.5,
+        jointDeltas: [delta("right_elbow", 18, 18, "high"), wobble],
+      }),
+    );
+    for (const s of guide.strengths) {
+      expect(s).not.toContain("knee");
+      expect(s).not.toContain("within 0°");
+    }
+  });
+
+  it("numeric clause never contradicts its own direction word", () => {
+    // Flagged joint whose trimmed bias says MORE but whose raw clip means are
+    // nearly equal (outlier-heavy tail). The parenthetical must not print
+    // "(you 100° vs pro 100°, about 0° more) — a clear gap".
+    const d: JointDelta = {
+      ...delta("right_elbow", 16, 14, "high"),
+      proMeanDeg: 100.2,
+      userMeanDeg: 100.1,
+    };
+    const { guide } = generateGuideAndWorkouts(req({ jointDeltas: [d] }));
+    const obs = guide.keyIssues[0].observation;
+    expect(obs).not.toMatch(/about 0° (more|less)/);
+    expect(obs).toContain("14°"); // falls back to the coachable bias
+  });
+
+  it("phase advice is not anchored on a phase the detector barely saw", () => {
+    const phaseHit = (conf: number): JointDelta => ({
+      ...delta("right_elbow", 30, 30, "high"),
+      avgConf: conf,
+    });
+    const mk = (conf: number) =>
+      generateGuideAndWorkouts(
+        req({
+          jointDeltas: [delta("right_elbow", 18, 18, "high")],
+          phases: [
+            { name: "load", startFrame: 0, endFrame: 10, topDeltas: [] },
+            { name: "release", startFrame: 11, endFrame: 20, topDeltas: [phaseHit(conf)] },
+          ],
+        }),
+      ).guide.keyIssues[0].fix;
+    expect(mk(0.1)).not.toContain("release phase"); // unseen phase bias: no localization
+    expect(mk(0.9)).toContain("release phase"); // confidently seen: localized as before
+  });
 });

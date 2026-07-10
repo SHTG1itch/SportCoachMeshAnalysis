@@ -370,12 +370,20 @@ function gapDeg(d: JointDelta): number {
 }
 
 function numericClause(d: JointDelta): string {
-  // Derive the "about N° more/less" from the same two numbers shown beside it.
-  // gapDeg (the trimmed signed bias) is computed from per-pair differences, so
-  // it need not equal user − pro exactly — quoting it here made the sentence
-  // contradict its own parenthetical (e.g. "you 96° vs pro 90°, about 9° more").
-  const diff = Math.round(Math.abs(d.userMeanDeg - d.proMeanDeg));
-  return `(you ${d.userMeanDeg}° vs pro ${d.proMeanDeg}°, about ${diff}° ${d.signedBiasDeg >= 0 ? "more" : "less"})`;
+  // The direction word must match the FIX direction (bias sign). The two means
+  // are a different statistic (independently-trimmed clip averages vs the
+  // trimmed per-pair bias), so on outlier-heavy clips they can round to a 0°
+  // difference — or even point the other way — for a genuinely flagged joint.
+  // Only quote the means when they visibly agree with the direction word;
+  // otherwise describe the bias itself so the sentence never contradicts its
+  // own parenthetical.
+  const dirWord = d.signedBiasDeg >= 0 ? "more" : "less";
+  const meanDiff = d.userMeanDeg - d.proMeanDeg;
+  const diff = Math.round(Math.abs(meanDiff));
+  if (diff >= 1 && Math.sign(meanDiff) === Math.sign(d.signedBiasDeg)) {
+    return `(you average ${Math.round(d.userMeanDeg)}° vs the pro's ${Math.round(d.proMeanDeg)}°, about ${diff}° ${dirWord})`;
+  }
+  return `(about ${Math.round(gapDeg(d))}° ${dirWord} through the swing, even though the whole-clip averages nearly match)`;
 }
 
 /** Magnitude bucket so advice scales with how far off the user actually is. */
@@ -405,6 +413,11 @@ function worstPhaseFor(
   for (const p of phases) {
     const hit = p.topDeltas.find((td) => td.joint === joint);
     if (!hit || Math.sign(hit.signedBiasDeg) !== overallSign) continue;
+    // Phase-level biases from frames the detector barely saw (motion-blurred
+    // contact, occlusion) are guesses — compare.ts refuses to FLAG on them for
+    // exactly that reason, so don't send the user to rehearse a phase on the
+    // strength of one either.
+    if (!confidentlySeen(hit)) continue;
     if (gapDeg(hit) > bestVal) {
       bestVal = gapDeg(hit);
       best = p.name;
@@ -500,17 +513,28 @@ function buildGuide(req: GuideRequest): ImprovementGuide {
   const matched = dedupeByGroup(
     // confidentlySeen: a joint whose "low" came from the confidence override
     // (occluded, not measured) must not be praised as matching the pro.
+    // meanDeltaDeg cap: a near-zero BIAS can hide large per-frame differences
+    // that merely cancel over the clip (early +15°, late −15°) — "closely
+    // matches" must mean the frames actually track the pro, not that the
+    // errors averaged out.
     [...deltas]
-      .filter((d) => d.significance === "low" && confidentlySeen(d))
-      .sort((a, b) => gapDeg(a) - gapDeg(b)),
+      .filter((d) => d.significance === "low" && confidentlySeen(d) && d.meanDeltaDeg <= 10)
+      .sort((a, b) => a.meanDeltaDeg - b.meanDeltaDeg),
   )
     .filter((d) => !issueGroups.has(jointKey(d.joint)) && !targetGroups.has(jointKey(d.joint)))
     .slice(0, 3)
-    .map((d) => `Your ${MECHANICS[jointKey(d.joint)].group} closely matches the pro (within ${Math.round(gapDeg(d))}°).`);
+    .map(
+      (d) =>
+        `Your ${MECHANICS[jointKey(d.joint)].group} closely matches the pro (within ${Math.max(1, Math.round(Math.max(gapDeg(d), d.meanDeltaDeg)))}°).`,
+    );
   const strengths =
     matched.length > 0
       ? matched
-      : [`Overall mesh similarity is ${simPct}% — a solid base to build on.`];
+      : simPct >= 60
+        ? [`Overall mesh similarity is ${simPct}% — a solid base to build on.`]
+        : [
+            `You have a complete, comparable rep on film — closing the gaps below is what will move your ${simPct}% similarity up.`,
+          ];
 
   const cues = Array.from(
     new Set(top.map((d) => resolveKnowledge(d.joint, d.signedBiasDeg >= 0 ? "more" : "less").cue)),
@@ -521,10 +545,22 @@ function buildGuide(req: GuideRequest): ImprovementGuide {
   );
 
   const issueCount = ranked.length;
-  const summary =
-    issueCount === 0
-      ? `Your ${shot} skeleton closely mirrors the pro at ${simPct}% overall mesh similarity — no major mismatches stood out. Keep reinforcing what's working and chase consistency.`
-      : `Your ${shot} reaches ${simPct}% overall mesh similarity to the pro, with ${issueCount} joint${issueCount > 1 ? "s" : ""} to bring into line. The biggest is your ${titleCase(resolveKnowledge(top[0].joint, top[0].signedBiasDeg >= 0 ? "more" : "less").group)} (${Math.round(gapDeg(top[0]))}° off). Close each gap by matching the pro's position and training the muscles that drive it.`;
+  // Zero flagged issues does NOT imply a close match: it also happens when the
+  // cameras barely saw the athlete (every joint confidence-gated) or when the
+  // mismatch lives in timing/dynamics rather than average positions (low
+  // similarity, small biases). Praising "closely mirrors the pro" next to a
+  // low similarity number contradicts itself in one sentence.
+  const anySeen = deltas.some(confidentlySeen);
+  let summary: string;
+  if (issueCount > 0) {
+    summary = `Your ${shot} reaches ${simPct}% overall mesh similarity to the pro, with ${issueCount} joint${issueCount > 1 ? "s" : ""} to bring into line. The biggest is your ${titleCase(resolveKnowledge(top[0].joint, top[0].signedBiasDeg >= 0 ? "more" : "less").group)} (${Math.round(gapDeg(top[0]))}° off). Close each gap by matching the pro's position and training the muscles that drive it.`;
+  } else if (!anySeen) {
+    summary = `We couldn't see enough of your body clearly to coach specific joints — overall mesh similarity reads ${simPct}%, but the joint detail is a guess. Re-film with your whole body in frame, decent light and the camera side-on for a full breakdown.`;
+  } else if (simPct >= 70) {
+    summary = `Your ${shot} skeleton closely mirrors the pro at ${simPct}% overall mesh similarity — no major mismatches stood out. Keep reinforcing what's working and chase consistency.`;
+  } else {
+    summary = `No single joint holds a consistent gap vs the pro, but overall mesh similarity is ${simPct}% — the differences live in timing and movement dynamics rather than average positions. Groove the full motion at slow speed against the pro's sequence, then build back up.`;
+  }
 
   return { summary, strengths, keyIssues, drills, cues };
 }
@@ -589,6 +625,17 @@ function buildWorkouts(req: GuideRequest): Workout[] {
 
   // The muscle groups behind the mismatches — the basis for every workout.
   const muscles = rankMuscles(targets, 5);
+  // A heavily occluded clip can leave NOTHING flagged and nothing confidently
+  // seen: without a fallback the three workouts render as saveable cards with
+  // empty exercise lists and dangling "…mesh gaps: ." focus strings. Train the
+  // sport-generic foundation instead and say so honestly.
+  const genericTargets = muscles.length === 0;
+  if (genericTargets) {
+    for (const id of ["core", "glutes", "deltoids", "quadriceps"]) {
+      const k = MUSCLES[id];
+      if (k) muscles.push({ id, k, gap: 0, high: false, forGroups: [] });
+    }
+  }
   const muscleLabelsList = muscles.map((m) => m.k.label);
   const targetsJoints = Array.from(new Set(targets.map((d) => d.joint)));
   const targetsMuscles = muscles.map((m) => m.id);
@@ -612,9 +659,11 @@ function buildWorkouts(req: GuideRequest): Workout[] {
       ),
     );
 
-  const muscleSummary = muscles
-    .map((m) => `${m.k.label} (${m.forGroups.join("/")}, ${Math.round(m.gap)}°)`)
-    .join(", ");
+  const muscleSummary = genericTargets
+    ? listProse(muscleLabelsList)
+    : muscles
+        .map((m) => `${m.k.label} (${m.forGroups.join("/")}, ${Math.round(m.gap)}°)`)
+        .join(", ");
 
   // 1. Mobility & activation — free up and switch on the implicated muscles.
   const w1Warm = muscles.slice(0, 4).map((m) => m.k.mobilize);
@@ -623,7 +672,9 @@ function buildWorkouts(req: GuideRequest): Workout[] {
   const workout1: Workout = {
     id: slug([sport.id, shot, "mobility"]),
     title: "Mobility & activation",
-    focus: `Free up and switch on the muscles behind your ${shot} mesh gaps: ${listProse(muscleLabelsList.slice(0, 4))}.`,
+    focus: genericTargets
+      ? `Free up and switch on the foundation muscles for your ${shot}: ${listProse(muscleLabelsList.slice(0, 4))}. (No joint was seen clearly enough to target specific gaps.)`
+      : `Free up and switch on the muscles behind your ${shot} mesh gaps: ${listProse(muscleLabelsList.slice(0, 4))}.`,
     durationMin: dur([...w1Warm, ...w1Main, ...w1Cool]),
     difficulty: "beginner",
     equipment: ["resistance band"],
@@ -649,7 +700,9 @@ function buildWorkouts(req: GuideRequest): Workout[] {
   const workout2: Workout = {
     id: slug([sport.id, shot, "strength"]),
     title: "Corrective strength",
-    focus: `Strengthen the muscle groups driving your biggest mismatches with the pro: ${muscleSummary}.`,
+    focus: genericTargets
+      ? `Build general strength for your ${shot} across ${muscleSummary}.`
+      : `Strengthen the muscle groups driving your biggest mismatches with the pro: ${muscleSummary}.`,
     durationMin: dur([...w2Warm, ...w2Main, ...w2Cool]),
     difficulty,
     equipment: ["dumbbells", "cable or band", "bench"],
@@ -675,7 +728,7 @@ function buildWorkouts(req: GuideRequest): Workout[] {
       name: `Match-the-pro hold — ${t.group}`,
       sets: 3,
       reps: "20-30s holds",
-      description: `Set your ${t.group} to the pro's ~${d.proMeanDeg}° (you average ${d.userMeanDeg}°) and hold; film side-on and compare to close the ~${Math.round(gapDeg(d))}° gap.`,
+      description: `Set your ${t.group} to the pro's ~${Math.round(d.proMeanDeg)}° (you average ${Math.round(d.userMeanDeg)}°) and hold; film side-on and compare to close the ~${Math.round(gapDeg(d))}° gap.`,
       cues: [t.cue],
     };
   });
