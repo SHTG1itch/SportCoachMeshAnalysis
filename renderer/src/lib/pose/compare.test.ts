@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   compare,
   repairImplausibleFrames,
+  repairImplausible,
   weightedPercentile,
   weightedTrimmedMean,
 } from "./compare";
@@ -332,6 +333,11 @@ describe("compare", () => {
     expect(out[2][0]).toBeCloseTo(10, 5); // whole vector repaired, not just trunk_lean
     expect(out[0][TL]).toBe(10); // clean frames untouched
     expect(out[4][TL]).toBe(10);
+    // The mask variant reports exactly the synthesized frames, so the caller
+    // can cap their confidence — repaired values are fabrications and must not
+    // carry the flip frame's original (high) detector confidence.
+    const { repaired } = repairImplausible(seq);
+    expect(repaired).toEqual([false, false, true, false, false]);
   });
 
   it("significance is driven by systematic bias, not noisy mean-abs delta", () => {

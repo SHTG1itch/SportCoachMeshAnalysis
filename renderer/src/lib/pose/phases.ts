@@ -153,6 +153,12 @@ export function detectPhases(
       peak = i;
     }
   }
+  // A perfectly static key joint has no motion to segment: without this guard
+  // the half-peak scans (0 < 0 never true) label the ENTIRE clip "release",
+  // which downstream copy then treats as the contact moment.
+  if (!(peakVal > 0)) {
+    return [{ name: "full", startFrame: 0, endFrame: n - 1 }];
+  }
 
   // Half-peak crossings. A clip that starts (or ends) mid-swing may never drop
   // below half-peak on that side — the old code then left releaseStart AT the

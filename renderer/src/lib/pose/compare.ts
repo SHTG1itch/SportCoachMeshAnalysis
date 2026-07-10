@@ -273,6 +273,30 @@ export function repairImplausibleFrames(
   seq: number[][],
   conf?: number[][],
 ): number[][] {
+  return repairImplausible(seq, conf).seq;
+}
+
+/**
+ * As repairImplausibleFrames, but also reports WHICH frames were synthesized
+ * (interpolated or edge-held), so the caller can cap their detection
+ * confidence: the flip frames escaped visibility gating precisely because the
+ * detector was confident, and without the cap DTW/deltas would weight the
+ * fabricated replacement values at full strength — the opposite of the
+ * pipeline's rule that synthetic samples carry honest low confidence.
+ */
+export function repairImplausible(
+  seq: number[][],
+  conf?: number[][],
+): { seq: number[][]; repaired: boolean[] } {
+  const repaired = new Array<boolean>(seq.length).fill(false);
+  return { seq: repairImpl(seq, conf, repaired), repaired };
+}
+
+function repairImpl(
+  seq: number[][],
+  conf: number[][] | undefined,
+  repairedOut: boolean[],
+): number[][] {
   const n = seq.length;
   if (n === 0 || TRUNK_LEAN_IDX < 0) return seq;
   const F = seq[0].length;
@@ -315,6 +339,7 @@ export function repairImplausibleFrames(
   }
   for (let i = 0; i < n; i++) {
     if (plausible(i)) continue;
+    repairedOut[i] = true;
     const lo = prevAnchor[i];
     const hi = nextAnchor[i];
     for (let f = 0; f < F; f++) {
@@ -561,21 +586,27 @@ export function compare(input: CompareInput): AnalysisReport {
   // each clip's own key-joint speed profile and is conservative: clips with no
   // usable peak come back untouched (see activeWindow). Raw frames are cropped
   // with the same window so confidence/mesh indices stay aligned.
+  // Each clip's dominant side is detected ONCE (full clip, before cropping) and
+  // reused for the crop, handedness, and phase anchoring. Re-detecting after
+  // the crop could disagree with the side the crop itself was keyed on,
+  // leaving the window and the phases anchored to different joints.
   const cropToActive = (
     frames: PoseFrame[],
     raw: PoseFrame[],
     fps: number,
-  ): [PoseFrame[], PoseFrame[]] => {
+  ): [PoseFrame[], PoseFrame[], Side] => {
     const side = detectDominantSide(frames, keyType);
     const w = activeWindow(frames, sidedJoint(side, keyType), fps);
-    if (w.start === 0 && w.end === frames.length - 1) return [frames, raw];
-    return [frames.slice(w.start, w.end + 1), raw.slice(w.start, w.end + 1)];
+    if (w.start === 0 && w.end === frames.length - 1) return [frames, raw, side];
+    return [frames.slice(w.start, w.end + 1), raw.slice(w.start, w.end + 1), side];
   };
+  let proSideFromClip: Side | null = null;
+  let userSideFromClip: Side | null = null;
   if (input.pro.kind === "video" && proFrames.length > 1) {
-    [proFrames, rawPro] = cropToActive(proFrames, rawPro, input.pro.fps);
+    [proFrames, rawPro, proSideFromClip] = cropToActive(proFrames, rawPro, input.pro.fps);
   }
   if (userFrames.length > 1) {
-    [userFrames, rawUser] = cropToActive(userFrames, rawUser, input.user.fps);
+    [userFrames, rawUser, userSideFromClip] = cropToActive(userFrames, rawUser, input.user.fps);
   }
 
   // Detection coverage over the segment actually compared (RAW frames, before
@@ -591,9 +622,26 @@ export function compare(input: CompareInput): AnalysisReport {
   // the angle vectors.
   const proConf = featureConfidenceSequence(rawPro);
   const userConfRaw = featureConfidenceSequence(rawUser);
+  const proRep = repairImplausible(computeAnglesSequence(proFrames), proConf);
+  const userRep = repairImplausible(computeAnglesSequence(userFrames), userConfRaw);
+  const proAngles = proRep.seq;
+  const userAnglesRaw = userRep.seq;
+  // Repaired frames are synthetic (interpolated/edge-held across a depth-flip
+  // run) yet carried the flip frames' original — high — detector confidence.
+  // Cap them at the TTA-disagreement level (below VIS_THRESHOLD) so fabricated
+  // values can't steer the alignment or the deltas at full weight. Done AFTER
+  // repair so the cap can't disturb the repair's own anchor selection, and
+  // BEFORE mirroring so the mirrored confidence copy inherits it.
+  const REPAIRED_CONF_CAP = 0.25;
+  const capRepaired = (conf: number[][], repaired: boolean[]) => {
+    for (let i = 0; i < conf.length; i++) {
+      if (!repaired[i]) continue;
+      conf[i] = conf[i].map((c) => Math.min(c, REPAIRED_CONF_CAP));
+    }
+  };
+  capRepaired(proConf, proRep.repaired);
+  capRepaired(userConfRaw, userRep.repaired);
   const userConfMirrored = mirrorAnglesSequence(userConfRaw);
-  const proAngles = repairImplausibleFrames(computeAnglesSequence(proFrames), proConf);
-  const userAnglesRaw = repairImplausibleFrames(computeAnglesSequence(userFrames), userConfRaw);
 
   // single_frame only for an actual pro IMAGE or a genuinely single-frame clip.
   // A 2-frame video used to be downgraded here too (proAngles.length <= 2),
@@ -611,7 +659,7 @@ export function compare(input: CompareInput): AnalysisReport {
   // Motion-energy handedness for the user clip — used only by single-frame
   // mode, where there is no alignment to resolve orientation from directly.
   // Sequence mode infers the user's side from the best-matching orientation.
-  let userSide = detectDominantSide(userFrames, keyType);
+  let userSide = userSideFromClip ?? detectDominantSide(userFrames, keyType);
   const userAnglesMirrored = mirrorAnglesSequence(userAnglesRaw);
   const opposite = (s: Side): Side => (s === "right" ? "left" : "right");
 
@@ -646,7 +694,7 @@ export function compare(input: CompareInput): AnalysisReport {
     // collapsing the comparison); best-of-both-alignments has no such knife edge:
     // when the two orientations genuinely tie, either choice compares
     // near-symmetric sides and changes almost nothing.
-    proSide = detectDominantSide(proFrames, keyType);
+    proSide = proSideFromClip ?? detectDominantSide(proFrames, keyType);
     // Align on the confidence-weighted standardized feature distance so no
     // single wide-range joint dominates the warp path, blown-out frames are
     // clamped, and features neither clip could actually see don't steer the
@@ -813,8 +861,10 @@ export function compare(input: CompareInput): AnalysisReport {
     userFps: input.user.fps,
     proFrameCount: proFrames.length,
     userFrameCount: userFrames.length,
-    durationSecPro: proFrames.length / Math.max(input.pro.fps, 1),
-    durationSecUser: userFrames.length / Math.max(input.user.fps, 1),
+    // Source-clip durations: the active-window crop shortens the COMPARED frame
+    // arrays, but the reported duration describes the clip the user recorded.
+    durationSecPro: input.pro.frames.length / Math.max(input.pro.fps, 1),
+    durationSecUser: input.user.frames.length / Math.max(input.user.fps, 1),
     alignment:
       mode === "sequence"
         ? { path, distance: +distance.toFixed(3), similarityTimeline: similarity }

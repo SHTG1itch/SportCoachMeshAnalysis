@@ -53,6 +53,15 @@ describe("detectPhases", () => {
     assertPartition(phases, 30);
   });
 
+  it("returns a single 'full' phase for a perfectly static key joint", () => {
+    // Regression: zero speed everywhere meant the half-peak scans never fired
+    // and the ENTIRE clip was labeled "release" — downstream copy then treated
+    // all of it as the contact moment.
+    const frames = Array.from({ length: 20 }, () => frameWithWrist(3));
+    const phases = detectPhases(frames, "right_wrist", 30);
+    expect(phases).toEqual([{ name: "full", startFrame: 0, endFrame: 19 }]);
+  });
+
   it("returns a single 'full' phase for clips too short to segment", () => {
     const phases = detectPhases([frameWithWrist(0), frameWithWrist(1)], "right_wrist", 30);
     expect(phases).toEqual([{ name: "full", startFrame: 0, endFrame: 1 }]);

@@ -1,6 +1,7 @@
 import type { JointName } from "@shared/types";
 import type { PoseFrame } from "./types";
 import { L } from "./types";
+import { VIS_THRESHOLD } from "./prepare";
 
 export type Side = "left" | "right";
 
@@ -35,12 +36,18 @@ export function sidedJoint(side: Side, type: string): JointName {
  * a parameter-free proxy for "which limb is doing the work".
  */
 function motionEnergy(frames: PoseFrame[], idx: number): number {
-  const n = frames.length;
+  // Only frames where the landmark was actually SEEN. A never-visible off-side
+  // wrist still gets positions from the detector — hallucinated guesses whose
+  // variance is fabricated "motion" that can out-vote the real working limb
+  // and flip the handedness call (and everything keyed on it: the active-window
+  // crop, phase anchoring, single-frame mirroring).
+  const usable = frames.filter((f) => (f[idx]?.visibility ?? 0) >= VIS_THRESHOLD);
+  const n = usable.length;
   if (n < 2) return 0;
   let mx = 0;
   let my = 0;
   let mz = 0;
-  for (const f of frames) {
+  for (const f of usable) {
     mx += f[idx].x;
     my += f[idx].y;
     mz += f[idx].z;
@@ -49,7 +56,7 @@ function motionEnergy(frames: PoseFrame[], idx: number): number {
   my /= n;
   mz /= n;
   let e = 0;
-  for (const f of frames) {
+  for (const f of usable) {
     const dx = f[idx].x - mx;
     const dy = f[idx].y - my;
     const dz = f[idx].z - mz;

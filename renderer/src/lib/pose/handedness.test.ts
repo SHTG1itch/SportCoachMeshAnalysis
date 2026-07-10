@@ -56,6 +56,18 @@ describe("detectDominantSide", () => {
   it("defaults to right when there is no motion (e.g. a still image)", () => {
     expect(detectDominantSide([standingFrame()], "wrist")).toBe("right");
   });
+
+  it("ignores hallucinated motion from a never-seen landmark", () => {
+    // Real swing on the RIGHT; the LEFT wrist is occluded the whole clip but
+    // the detector still emits wandering positions for it — with even larger
+    // variance than the real swing. Visibility gating must keep the fabricated
+    // motion from out-voting the working arm.
+    const frames = swingSeq("right").map((f, i) => {
+      f[L.LEFT_WRIST] = { x: -2 + i * 0.9, y: 2 - i * 0.7, z: i * 0.5, visibility: 0.1 };
+      return f;
+    });
+    expect(detectDominantSide(frames, "wrist")).toBe("right");
+  });
 });
 
 describe("mirrorAngleVector", () => {
