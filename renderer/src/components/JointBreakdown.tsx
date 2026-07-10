@@ -11,6 +11,19 @@ const SIG_STYLE: Record<JointDelta["significance"], string> = {
   low: "text-ok border-ok/30 bg-ok/10",
 };
 
+/** Mirrors COACHABLE_CONF in coach.ts / VIS_THRESHOLD in the pose pipeline:
+ * below this average detection confidence the joint's numbers are detector
+ * guesses, and the coach deliberately refuses to coach it. */
+const SEEN_CONF = 0.3;
+
+/** A joint the cameras couldn't see: its significance was forced to "low" by
+ * the confidence gate, but its angles/deltas are raw guesses that can be
+ * large — rendering them like measurements (green chip, near-full bar) made
+ * occluded joints look like the best AND worst matched rows at once. */
+export function jointNotSeen(d: JointDelta): boolean {
+  return (d.avgConf ?? 1) < SEEN_CONF;
+}
+
 export function JointBreakdown({ deltas }: Props) {
   if (deltas.length === 0) {
     return <div className="text-sm text-ink-400">No joint data available.</div>;
@@ -18,10 +31,29 @@ export function JointBreakdown({ deltas }: Props) {
   return (
     <div className="divide-y divide-white/5">
       {deltas.map((d) => {
+        if (jointNotSeen(d)) {
+          return (
+            <div key={d.joint} className="py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="chip border text-ink-400 border-white/10 bg-white/5">
+                    not seen
+                  </span>
+                  <span className="text-sm font-medium text-ink-300">{d.label}</span>
+                </div>
+              </div>
+              <div className="mt-1 text-xs text-ink-400">
+                The camera couldn't see this joint clearly enough to measure it.
+              </div>
+            </div>
+          );
+        }
         const biasLabel =
-          d.signedBiasDeg > 0
-            ? `+${d.signedBiasDeg.toFixed(1)}° more than pro`
-            : `${d.signedBiasDeg.toFixed(1)}° less than pro`;
+          Math.round(Math.abs(d.signedBiasDeg) * 10) === 0
+            ? "matches the pro's average"
+            : d.signedBiasDeg > 0
+              ? `+${d.signedBiasDeg.toFixed(1)}° more than pro`
+              : `${d.signedBiasDeg.toFixed(1)}° less than pro`;
         // Bar width scales the systematic gap (|signed bias|) against 30° max —
         // this is the coachable difference that also drives significance.
         const gap = Math.abs(d.signedBiasDeg);

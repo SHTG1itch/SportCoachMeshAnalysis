@@ -188,7 +188,10 @@ function conventionDiag(label: string, frames: PoseFrame[]) {
     const v = sums[i] / det.length;
     let flag = "";
     if (jf.name === "trunk_lean") {
-      flag = v < 30 ? "  ✓ upright≈0 ⇒ y-UP & gravity-aligned" : v > 150 ? "  ⚠ ≈180 ⇒ y-DOWN (sign flip)" : "  ⚠ mid ⇒ NOT gravity-aligned / leaning";
+      // trunk_lean is SIGNED — the upright/flip buckets must test |v|, or a
+      // per-frame -107° (y-down data through the y-up default) reads "✓ upright".
+      const a = Math.abs(v);
+      flag = a < 30 ? "  ✓ upright≈0 ⇒ y-UP & gravity-aligned" : a > 150 ? "  ⚠ ≈180 ⇒ y-DOWN (sign flip)" : "  ⚠ mid ⇒ NOT gravity-aligned / leaning";
     }
     if (jf.name === "shoulder_line_tilt") flag = v < 25 ? "  ✓ near-level" : "  ⚠ large tilt";
     emit(`    ${jf.name.padEnd(20)} ${f2(v).padStart(8)}°${flag}`);

@@ -4,7 +4,7 @@ import { ArrowLeft, RefreshCw, Save, Sparkles, Trash2 } from "lucide-react";
 import type { AnalysisRecord, SavedWorkout, Workout } from "@shared/types";
 import { generateGuideAndWorkouts } from "../lib/coach";
 import { DeltaChart } from "../components/DeltaChart";
-import { JointBreakdown } from "../components/JointBreakdown";
+import { JointBreakdown, jointNotSeen } from "../components/JointBreakdown";
 import { GuideView } from "../components/GuideView";
 import { WorkoutCard } from "../components/WorkoutCard";
 import { MeshCompare } from "../components/MeshCompare";
@@ -289,13 +289,18 @@ export function AnalysisResult({
                     {p.note && (
                       <div className="text-xs text-ink-300 mt-0.5">{p.note}</div>
                     )}
-                    {p.topDeltas[0] && (
-                      <div className="text-xs text-ink-300 mt-1">
-                        Biggest delta:{" "}
-                        <span className="text-ink-100">{p.topDeltas[0].label}</span> · Δ{" "}
-                        {Math.abs(p.topDeltas[0].signedBiasDeg).toFixed(1)}°
-                      </div>
-                    )}
+                    {(() => {
+                      // First delta the cameras actually saw — a guessed delta
+                      // from an occluded joint is not a "biggest delta".
+                      const td = p.topDeltas.find((t) => !jointNotSeen(t));
+                      return td ? (
+                        <div className="text-xs text-ink-300 mt-1">
+                          Biggest delta:{" "}
+                          <span className="text-ink-100">{td.label}</span> · Δ{" "}
+                          {Math.abs(td.signedBiasDeg).toFixed(1)}°
+                        </div>
+                      ) : null;
+                    })()}
                   </li>
                 ))}
               </ul>
@@ -303,7 +308,11 @@ export function AnalysisResult({
           </div>
           <div className="card p-5">
             <div className="h3 mb-3">Top differences</div>
-            <JointBreakdown deltas={report.jointDeltas.slice(0, 5)} />
+            {/* Unseen joints aren't differences — they're unknowns; the full
+                Joints tab still lists them with an explicit "not seen" row. */}
+            <JointBreakdown
+              deltas={report.jointDeltas.filter((d) => !jointNotSeen(d)).slice(0, 5)}
+            />
           </div>
         </div>
       )}
