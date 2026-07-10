@@ -113,6 +113,56 @@ describe("computeAngles", () => {
     expect(plantar[idx]).toBeLessThan(neutral[idx]);
   });
 
+  it("hip flexion GROWS as the hips fold (0 = standing tall)", () => {
+    // Pins the physical convention: the doc comment above hipFlex was once
+    // inverted, and an edit "fixing" the code to match it would flip every
+    // piece of hip coaching ("stand taller" vs "hinge deeper") with no test
+    // failing. Same trap that actually bit shoulder and ankle.
+    const base = {
+      [L.RIGHT_SHOULDER]: [0, 2, 0] as [number, number, number],
+      [L.RIGHT_HIP]: [0, 1, 0] as [number, number, number],
+      [L.LEFT_SHOULDER]: [-0.3, 2, 0] as [number, number, number],
+      [L.LEFT_HIP]: [-0.3, 1, 0] as [number, number, number],
+    };
+    const idx = JOINT_FEATURES.findIndex((j) => j.name === "right_hip");
+    // Standing: knee directly below the hip, thigh extending the torso line.
+    const standing = computeAngles(mkFrame({ ...base, [L.RIGHT_KNEE]: [0, 0.5, 0] }));
+    // Hinged ~90°: thigh horizontal.
+    const hinged = computeAngles(mkFrame({ ...base, [L.RIGHT_KNEE]: [0.5, 1, 0] }));
+    // Knee to chest: thigh parallel to the torso axis.
+    const folded = computeAngles(mkFrame({ ...base, [L.RIGHT_KNEE]: [0, 1.5, 0.01] }));
+    expect(standing[idx]).toBeCloseTo(0, 3);
+    expect(hinged[idx]).toBeCloseTo(90, 3);
+    expect(folded[idx]).toBeGreaterThan(170);
+  });
+
+  it("trunk rotation is zeroed AND de-confidenced when the horizontal projection degenerates", () => {
+    // Torso pitched ~90° (prone/dive): the shoulder line is near-vertical, so
+    // its horizontal projection is detector-noise residue. Without the gate the
+    // "rotation" between two noise vectors is a random 0–180° at FULL landmark
+    // visibility — systematic within a phase, so it survives the trimmed mean.
+    const f = mkFrame({
+      // Shoulder line runs almost straight down (+ tiny noise-scale x/z residue).
+      [L.LEFT_SHOULDER]: [0.02, 2, -0.01],
+      [L.RIGHT_SHOULDER]: [-0.01, 1, 0.02],
+      // Hip line stays horizontal.
+      [L.LEFT_HIP]: [-0.3, 1.5, 0],
+      [L.RIGHT_HIP]: [0.3, 1.5, 0],
+    });
+    const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_rotation");
+    expect(computeAngles(f)[idx]).toBe(0);
+    expect(featureConfidence(f)[idx]).toBe(0);
+    // A normal upright pose is untouched by the gate.
+    const upright = mkFrame({
+      [L.LEFT_SHOULDER]: [-0.3, 2, 0],
+      [L.RIGHT_SHOULDER]: [0.3, 2, 0.3],
+      [L.LEFT_HIP]: [-0.3, 1, 0],
+      [L.RIGHT_HIP]: [0.3, 1, 0],
+    });
+    expect(computeAngles(upright)[idx]).toBeGreaterThan(1);
+    expect(featureConfidence(upright)[idx]).toBe(1);
+  });
+
   it("trunk rotation ~ 0 when shoulders parallel to hips", () => {
     const f = mkFrame({
       [L.LEFT_SHOULDER]: [-1, 2, 0],
@@ -286,8 +336,18 @@ describe("computeAngles", () => {
 });
 
 describe("featureConfidence", () => {
+  // Real torso geometry: the all-zero mkFrame default has zero-length shoulder
+  // and hip lines, which the trunk_rotation projection gate rightly treats as
+  // unmeasurable — confidence fixtures must be geometrically valid poses.
+  const TORSO = {
+    [L.LEFT_SHOULDER]: [-0.3, 2, 0] as [number, number, number],
+    [L.RIGHT_SHOULDER]: [0.3, 2, 0] as [number, number, number],
+    [L.LEFT_HIP]: [-0.3, 1, 0] as [number, number, number],
+    [L.RIGHT_HIP]: [0.3, 1, 0] as [number, number, number],
+  };
+
   it("returns one confidence per feature, 1.0 when everything is visible", () => {
-    const f = mkFrame({});
+    const f = mkFrame(TORSO);
     const c = featureConfidence(f);
     expect(c).toHaveLength(JOINT_FEATURES.length);
     expect(FEATURE_LANDMARKS).toHaveLength(JOINT_FEATURES.length);
@@ -310,7 +370,7 @@ describe("featureConfidence", () => {
     // landmark is below its visibility gate, so a bad hip must lower the
     // confidence of shoulder_line_tilt too even though its geometry only uses
     // the shoulders — otherwise the gated 0 reads as a trustworthy angle.
-    const f = mkFrame({});
+    const f = mkFrame(TORSO);
     f[L.LEFT_HIP].visibility = 0.1;
     const c = featureConfidence(f);
     const idx = (n: string) => JOINT_FEATURES.findIndex((j) => j.name === n);

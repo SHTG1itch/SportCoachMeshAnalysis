@@ -61,7 +61,7 @@ export const FEATURE_LANDMARKS: number[][] = [
  * the whole angle regardless of how visible the other landmarks are.
  */
 export function featureConfidence(frame: PoseFrame): number[] {
-  return FEATURE_LANDMARKS.map((lms) => {
+  const out = FEATURE_LANDMARKS.map((lms) => {
     let c = 1;
     for (const i of lms) {
       const v = frame[i]?.visibility ?? 0;
@@ -69,6 +69,44 @@ export function featureConfidence(frame: PoseFrame): number[] {
     }
     return c < 0 ? 0 : c > 1 ? 1 : c;
   });
+  // trunk_rotation is measured on horizontal projections; when the projection
+  // collapses the angle is noise, so its confidence must collapse with it (the
+  // zeroed value in computeAngles must never read as a trustworthy 0°).
+  if (trunkRotationProjectionRatio(frame) < TRUNK_ROT_MIN_PROJ) {
+    out[TRUNK_ROTATION_INDEX] = 0;
+  }
+  return out;
+}
+
+/** Index of trunk_rotation in JOINT_FEATURES order. */
+const TRUNK_ROTATION_INDEX = 10;
+
+/**
+ * trunk_rotation projects the shoulder and hip lines onto the horizontal plane.
+ * When the athlete's torso is pitched/rolled so far that a body line is nearly
+ * parallel to the vertical axis (dive entry, slide tackle, inverted poses), the
+ * projection shrinks to a detector-noise residual and the "rotation" between
+ * two noise vectors is a random 0–180° at full landmark visibility. Below this
+ * fraction of surviving projected length (cos ~75° tilt) the value is zeroed
+ * and its confidence dropped so downstream treats it as not measured.
+ */
+export const TRUNK_ROT_MIN_PROJ = 0.25;
+
+/** Fraction (0..1) of the shorter of the shoulder/hip lines that survives the
+ * horizontal projection trunk_rotation is computed on. */
+export function trunkRotationProjectionRatio(frame: PoseFrame): number {
+  const lines = [
+    sub(asVec(frame[L.RIGHT_SHOULDER]), asVec(frame[L.LEFT_SHOULDER])),
+    sub(asVec(frame[L.RIGHT_HIP]), asVec(frame[L.LEFT_HIP])),
+  ];
+  let ratio = 1;
+  for (const v of lines) {
+    const full = Math.hypot(v.x, v.y, v.z);
+    if (full === 0) return 0;
+    const flat = Math.hypot(v.x, v.z) / full;
+    if (flat < ratio) ratio = flat;
+  }
+  return ratio;
 }
 
 /**
@@ -124,7 +162,10 @@ export function computeAngles(frame: PoseFrame, upSign: number = 1): number[] {
   out.push(shoulderAb(L.RIGHT_SHOULDER, L.RIGHT_HIP, L.RIGHT_ELBOW));
 
   // Hip flexion: angle at hip between torso (shoulder-hip) and thigh (hip-knee).
-  // 0 = thigh aligned with torso (fully flexed), 180 = straight (standing).
+  // 0 = standing tall (thigh extends the torso line), 180 = fully folded
+  // (knee to chest). Bigger = MORE hip flexion — the coach copy ("you fold more
+  // at the hips") and the direction-pinning test depend on this orientation;
+  // the raw torso/thigh angle is the opposite, hence the 180 − a.
   const hipFlex = (shoulder: number, hip: number, knee: number): number => {
     const torso = sub(getV(shoulder), getV(hip));
     const thigh = sub(getV(knee), getV(hip));
@@ -168,7 +209,14 @@ export function computeAngles(frame: PoseFrame, upSign: number = 1): number[] {
   // Project both onto horizontal plane (remove y component) and measure unsigned angle.
   const shFlat: Vec3 = { x: shoulderLine.x, y: 0, z: shoulderLine.z };
   const hipFlat: Vec3 = { x: hipLine.x, y: 0, z: hipLine.z };
-  out.push(angleBetweenDeg(shFlat, hipFlat));
+  // Degenerate projection (torso pitched near the vertical axis) → the angle
+  // is noise between residual vectors: report 0 and let featureConfidence drop
+  // the feature to unmeasured so the 0 carries no weight downstream.
+  out.push(
+    trunkRotationProjectionRatio(frame) < TRUNK_ROT_MIN_PROJ
+      ? 0
+      : angleBetweenDeg(shFlat, hipFlat),
+  );
 
   // Trunk lean: SIGNED angle between the torso axis (hip midpoint -> shoulder
   // midpoint) and vertical. 0 = upright, positive = leaning toward the
