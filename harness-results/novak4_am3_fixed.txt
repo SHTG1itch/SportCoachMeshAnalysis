@@ -1,0 +1,218 @@
+STATUS: DONE
+Harness config: pro=/testclips/novak4_fh user=/testclips/am3_fh sport=tennis shot=Forehand proKind=video maxFrames=240 selftest=true
+· pro frames: 150
+· user frames: 150
+· saved frames_novak4_fh (295285 bytes)
+· saved frames_am3_fh (281385 bytes)
+
+###### COORDINATE-CONVENTION & ANGLE-SANITY DIAGNOSTICS ######
+
+[PRO /testclips/novak4_fh] 150 frames, 150 detected (100.00%)
+  median(shoulderMid.y - hipMid.y) = -0.48  (- ⇒ shoulders ABOVE hips at -y ⇒ y-DOWN)
+  median(hipMid.y - ankleMid.y)    = -0.72
+  sample mid-frame raw world landmarks:
+    NOSE           x=0.28 y=-0.54 z=-0.05 vis=1.00
+    L_SHOULDER     x=0.01 y=-0.44 z=0.00 vis=1.00
+    R_SHOULDER     x=0.26 y=-0.44 z=-0.11 vis=1.00
+    L_HIP          x=-0.08 y=-0.01 z=0.09 vis=1.00
+    R_HIP          x=0.08 y=0.01 z=-0.09 vis=1.00
+    L_ANKLE        x=-0.20 y=0.72 z=0.33 vis=0.99
+    R_ANKLE        x=0.20 y=0.74 z=-0.02 vis=1.00
+  mean angle features over detected frames:
+    left_elbow              53.90°
+    right_elbow             69.10°
+    left_shoulder           53.57°
+    right_shoulder          36.10°
+    left_hip                20.59°
+    right_hip               33.11°
+    left_knee               20.78°
+    right_knee              23.35°
+    left_ankle              64.62°
+    right_ankle             70.02°
+    trunk_rotation          22.35°
+    trunk_lean            -149.34°  ⚠ mid ⇒ NOT gravity-aligned / leaning
+    shoulder_line_tilt      12.28°  ✓ near-level
+
+[USER /testclips/am3_fh] 150 frames, 129 detected (86.00%)
+  median(shoulderMid.y - hipMid.y) = -0.47  (- ⇒ shoulders ABOVE hips at -y ⇒ y-DOWN)
+  median(hipMid.y - ankleMid.y)    = -0.57
+  sample mid-frame raw world landmarks:
+    NOSE           x=0.10 y=-0.61 z=-0.31 vis=1.00
+    L_SHOULDER     x=0.18 y=-0.48 z=-0.09 vis=1.00
+    R_SHOULDER     x=-0.10 y=-0.54 z=-0.09 vis=1.00
+    L_HIP          x=0.10 y=0.00 z=0.04 vis=1.00
+    R_HIP          x=-0.10 y=-0.01 z=-0.04 vis=1.00
+    L_ANKLE        x=0.21 y=0.65 z=0.30 vis=0.99
+    R_ANKLE        x=-0.38 y=0.63 z=0.11 vis=0.99
+  mean angle features over detected frames:
+    left_elbow              42.19°
+    right_elbow             45.91°
+    left_shoulder           56.24°
+    right_shoulder          49.00°
+    left_hip                36.19°
+    right_hip               33.47°
+    left_knee               43.11°
+    right_knee              41.38°
+    left_ankle              39.39°
+    right_ankle             77.72°
+    trunk_rotation          27.11°
+    trunk_lean             -97.94°  ⚠ mid ⇒ NOT gravity-aligned / leaning
+    shoulder_line_tilt      13.07°  ✓ near-level
+
+========== COMPARE: PRO vs USER ==========
+mode=sequence  overallSimilarity=0.53  handedness={"pro":"right","user":"left","mirrored":true}
+coverage={"pro":1,"user":0.864}  proFrames=117 userFrames=147
+dtw.distance=1.29
+
+joint deltas (sorted by impact):
+  joint                   mean     max     pro    user    bias  sig
+  right_knee             24.71   51.54   24.75   50.45   23.77  high
+  left_knee              23.33   51.12   15.99   41.00   23.30  high
+  left_ankle             19.94   39.12   68.71   88.29   17.81  high
+  right_ankle            20.89   51.07   63.35   44.82  -15.97  high
+  left_shoulder          34.07   77.31   46.57   34.20  -12.25  medium
+  left_hip               12.86   28.66   15.61   26.18   10.36  medium
+  right_elbow            24.52   57.58   69.58   47.12  -17.01  low
+  left_elbow             37.23   71.74   34.54   46.36   15.47  low
+  right_shoulder         12.04   25.63   34.41   39.25    3.57  low
+  right_hip              12.47   27.90   36.95   39.38    3.30  low
+  shoulder_line_tilt      4.74   12.09   10.41    8.77   -1.72  low
+  trunk_rotation          8.27   24.03   22.87   22.90    0.85  low
+  trunk_lean             12.15   20.29   10.51   11.12   -0.18  low
+
+phases:
+  preparation      [33-53]  top: left_ankle Δ27.60, right_knee Δ26.88, right_elbow Δ25.51, left_knee Δ12.18
+  load             [54-67]  top: left_shoulder Δ64.47, right_ankle Δ47.25, left_elbow Δ28.44, right_knee Δ19.41
+  release          [68-87]  top: left_shoulder Δ75.26, right_ankle Δ45.15, left_elbow Δ31.44, left_ankle Δ24.09
+  follow_through   [88-149]  top: left_knee Δ29.14, right_knee Δ27.55, left_hip Δ16.19, left_ankle Δ18.14
+
+--- GUIDE ---
+summary: Your Forehand reaches 53% overall mesh similarity to the pro, with 4 joints to bring into line. The biggest is your Knee (24° off). Close each gap by matching the pro's position and training the muscles that drive it.
+strengths: Your shoulder line tilt closely matches the pro (within 5°). | Your trunk rotation closely matches the pro (within 8°).
+cues: less knee bend to match | ease the ankle to match | more arm separation to match | taller hips to match
+  issue1: Knee: too much vs the pro
+    observation: Your knee stays more bent than the pro's (you average 50° vs the pro's 25°, about 25° more) — a major gap.
+    cause: This position is controlled mainly by your quadriceps and hamstrings.
+    fix: Prioritize this: To match the pro, straighten the knee a little to match the pro. It shows up most during the preparation phase — focus your reps there.
+  issue2: Ankle: too much vs the pro
+    observation: Your ankle is more flexed (shin further over the toes) than the pro's (you average 88° vs the pro's 69°, about 19° more) — a clear gap.
+    cause: This position is controlled mainly by your calves and shins (tibialis).
+    fix: To match the pro, let the shin sit back a little so the ankle angle matches the pro. It shows up most during the preparation phase — focus your reps there.
+  issue3: Shoulder: too little vs the pro
+    observation: Your arm stays closer to your torso than the pro's (you average 34° vs the pro's 47°, about 13° less) — a clear gap.
+    cause: This position is controlled mainly by your shoulders (deltoids), lats and rotator cuff.
+    fix: To match the pro, create more space between your arm and torso to match the pro's arm position. It shows up most during the load phase — focus your reps there.
+  issue4: Hip: too much vs the pro
+    observation: You fold more at the hips than the pro (you average 26° vs the pro's 16°, about 10° more) — a small gap.
+    cause: This position is controlled mainly by your glutes, hamstrings, hip flexors and adductors.
+    fix: To match the pro, stand a touch taller at the hips to match the pro's posture. It shows up most during the follow through phase — focus your reps there.
+
+--- WORKOUTS ---
+  [Mobility & activation] beginner 17min  targets=right_knee,left_ankle,left_shoulder,left_hip
+    focus: Free up and switch on the muscles behind your Forehand mesh gaps: quadriceps, hamstrings, calves and shins (tibialis).
+    main: Goblet squat | Romanian deadlift
+    notes: Do this on training days before skill work.
+  [Corrective strength] advanced 35min  targets=right_knee,left_ankle,left_shoulder,left_hip
+    focus: Strengthen the muscle groups driving your biggest mismatches with the pro: quadriceps (knee, 24°), hamstrings (knee/hip, 24°), calves (ankle, 18°), shins (tibialis) (ankle, 18°), shoulders (deltoids) (shoulder, 12°).
+    main: Goblet squat | Romanian deadlift | Single-leg calf raise | Tibialis raises | Landmine press
+    notes: 2–3× per week with a day of recovery between sessions. Push the main lifts, but end a set the moment form degrades.
+  [Flexibility & position-matching] advanced 16min  targets=right_knee,left_ankle,left_shoulder,left_hip
+    focus: Lengthen the tight muscles and groove the corrected positions so your skeleton matches the pro's.
+    main: Match-the-pro hold — knee | Match-the-pro hold — ankle | Match-the-pro hold — shoulder | Standing quad stretch | Standing hamstring stretch | Wall calf stretch | Kneeling shin stretch
+    notes: Pay attention to the preparation → load → release → follow through sequence.
+
+###### SELF-CONSISTENCY ######
+
+========== COMPARE: PRO vs PRO (expect ~1.0) ==========
+mode=sequence  overallSimilarity=1.00  handedness={"pro":"right","user":"right","mirrored":false}
+coverage={"pro":1,"user":1}  proFrames=117 userFrames=117
+dtw.distance=0.00
+
+joint deltas (sorted by impact):
+  joint                   mean     max     pro    user    bias  sig
+  left_elbow              0.00    0.00   50.84   50.84    0.00  low
+  right_elbow             0.00    0.00   61.96   61.96    0.00  low
+  left_shoulder           0.00    0.00   60.28   60.28    0.00  low
+  right_shoulder          0.00    0.00   36.74   36.74    0.00  low
+  left_hip                0.00    0.00   17.27   17.27    0.00  low
+  right_hip               0.00    0.00   36.26   36.26    0.00  low
+  left_knee               0.00    0.00   16.86   16.86    0.00  low
+  right_knee              0.00    0.00   27.13   27.13    0.00  low
+  left_ankle              0.00    0.00   62.76   62.76    0.00  low
+  right_ankle             0.00    0.00   73.69   73.69    0.00  low
+  trunk_rotation          0.00    0.00   21.58   21.58    0.00  low
+  trunk_lean              0.00    0.00   12.34   12.34    0.00  low
+  shoulder_line_tilt      0.00    0.00   10.99   10.99    0.00  low
+
+phases:
+  preparation      [33-53]  top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00, right_shoulder Δ0.00
+  load             [54-67]  top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00, right_shoulder Δ0.00
+  release          [68-87]  top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00, right_shoulder Δ0.00
+  follow_through   [88-149]  top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00, right_shoulder Δ0.00
+
+--- GUIDE ---
+summary: Your Forehand skeleton closely mirrors the pro at 100% overall mesh similarity — no major mismatches stood out. Keep reinforcing what's working and chase consistency.
+strengths: Your ankle closely matches the pro (within 1°). | Your trunk rotation closely matches the pro (within 1°). | Your trunk lean closely matches the pro (within 1°).
+cues: 
+
+--- WORKOUTS ---
+  [Mobility & activation] beginner 14min  targets=left_elbow,left_shoulder,left_hip,left_knee
+    focus: Free up and switch on the key muscles for your Forehand: triceps, biceps, forearms and shoulders (deltoids).
+    main: Cable/band triceps extension | Dumbbell biceps curl
+    notes: Do this on training days before skill work.
+  [Corrective strength] beginner 29min  targets=left_elbow,left_shoulder,left_hip,left_knee
+    focus: No consistent gaps vs the pro stood out — keep the muscle groups behind your Forehand strong: triceps, biceps, forearms, shoulders (deltoids) and lats.
+    main: Cable/band triceps extension | Dumbbell biceps curl | Wrist curls + reverse curls | Landmine press | Lat pulldown / band pulldown
+    notes: 2–3× per week with a day of recovery between sessions. Start light and own every position before adding load.
+  [Flexibility & position-matching] beginner 16min  targets=left_elbow,left_shoulder,left_hip,left_knee
+    focus: Lengthen the tight muscles and groove the corrected positions so your skeleton matches the pro's.
+    main: Match-the-pro hold — elbow | Match-the-pro hold — shoulder | Match-the-pro hold — hip | Overhead triceps stretch | Wall biceps stretch | Kneeling wrist stretch | Cross-body shoulder stretch
+    notes: Pay attention to the preparation → load → release → follow through sequence.
+
+========== COMPARE: PRO vs MIRROR(PRO) (expect ~1.0, mirrored=true) ==========
+mode=sequence  overallSimilarity=1.00  handedness={"pro":"right","user":"left","mirrored":true}
+coverage={"pro":1,"user":1}  proFrames=117 userFrames=117
+dtw.distance=0.00
+
+joint deltas (sorted by impact):
+  joint                   mean     max     pro    user    bias  sig
+  left_elbow              0.00    0.00   50.84   50.84    0.00  low
+  right_elbow             0.00    0.00   61.96   61.96    0.00  low
+  left_shoulder           0.00    0.00   60.28   60.28    0.00  low
+  right_shoulder          0.00    0.00   36.74   36.74    0.00  low
+  left_hip                0.00    0.00   17.27   17.27    0.00  low
+  right_hip               0.00    0.00   36.26   36.26    0.00  low
+  left_knee               0.00    0.00   16.86   16.86    0.00  low
+  right_knee              0.00    0.00   27.13   27.13    0.00  low
+  left_ankle              0.00    0.00   62.76   62.76    0.00  low
+  right_ankle             0.00    0.00   73.69   73.69    0.00  low
+  trunk_rotation          0.00    0.00   21.58   21.58    0.00  low
+  trunk_lean              0.00    0.00   12.34   12.34    0.00  low
+  shoulder_line_tilt      0.00    0.00   10.99   10.99    0.00  low
+
+phases:
+  preparation      [33-53]  top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00, right_shoulder Δ0.00
+  load             [54-67]  top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00, right_shoulder Δ0.00
+  release          [68-87]  top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00, right_shoulder Δ0.00
+  follow_through   [88-149]  top: left_elbow Δ0.00, right_elbow Δ0.00, left_shoulder Δ0.00, right_shoulder Δ0.00
+
+--- GUIDE ---
+summary: Your Forehand skeleton closely mirrors the pro at 100% overall mesh similarity — no major mismatches stood out. Keep reinforcing what's working and chase consistency.
+strengths: Your ankle closely matches the pro (within 1°). | Your trunk rotation closely matches the pro (within 1°). | Your trunk lean closely matches the pro (within 1°).
+cues: 
+
+--- WORKOUTS ---
+  [Mobility & activation] beginner 14min  targets=left_elbow,left_shoulder,left_hip,left_knee
+    focus: Free up and switch on the key muscles for your Forehand: triceps, biceps, forearms and shoulders (deltoids).
+    main: Cable/band triceps extension | Dumbbell biceps curl
+    notes: Do this on training days before skill work.
+  [Corrective strength] beginner 29min  targets=left_elbow,left_shoulder,left_hip,left_knee
+    focus: No consistent gaps vs the pro stood out — keep the muscle groups behind your Forehand strong: triceps, biceps, forearms, shoulders (deltoids) and lats.
+    main: Cable/band triceps extension | Dumbbell biceps curl | Wrist curls + reverse curls | Landmine press | Lat pulldown / band pulldown
+    notes: 2–3× per week with a day of recovery between sessions. Start light and own every position before adding load.
+  [Flexibility & position-matching] beginner 16min  targets=left_elbow,left_shoulder,left_hip,left_knee
+    focus: Lengthen the tight muscles and groove the corrected positions so your skeleton matches the pro's.
+    main: Match-the-pro hold — elbow | Match-the-pro hold — shoulder | Match-the-pro hold — hip | Overhead triceps stretch | Wall biceps stretch | Kneeling wrist stretch | Cross-body shoulder stretch
+    notes: Pay attention to the preparation → load → release → follow through sequence.
+
+###### DONE ######

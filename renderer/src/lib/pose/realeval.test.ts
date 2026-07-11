@@ -112,6 +112,14 @@ describe("real-data evaluation", () => {
     report("REAL: novak(pro) vs timo(user)", novak!.frames, novak!.fps, timo!.frames, timo!.fps);
     const novak2 = load("novak2_fh");
     if (novak2) report("CALIBRATION: novak(pro) vs novak2 (different pro stroke — expect HIGH)", novak!.frames, novak!.fps, novak2.frames, novak2.fps);
+    // 2026-07-10 additions: Djokovic groundstroke training (RPOlYGD4aGo,
+    // 2.5–7.5s) vs a LEFT-handed 3.5 amateur (RwEF_Mty7Ps, 89.5–94.5s).
+    // Expect: pro right-handed, user left-handed, mirrored=true (verified
+    // against the footage frame-by-frame), similarity between the timo and
+    // novak2 anchors.
+    const novak4 = load("novak4_fh");
+    const am3 = load("am3_fh");
+    if (novak4 && am3) report("REAL: novak4(pro) vs am3 lefty amateur (expect mirrored)", novak4.frames, novak4.fps, am3.frames, am3.fps);
     fs.writeFileSync(path.join(RESULTS, "eval.txt"), out);
     // eslint-disable-next-line no-console
     console.log(out);
