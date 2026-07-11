@@ -729,13 +729,11 @@ export function compare(input: CompareInput): AnalysisReport {
     const target = augmentWithConf([proAngles[0]], [proConf[0]])[0];
     const bestMatch = (
       seq: number[][],
-    ): { idx: number; dist: number } => {
-      let idx = 0;
+    ): { indices: number[]; dist: number } => {
       const dists: number[] = [];
       for (let i = 0; i < seq.length; i++) {
         const d = weightedStandardizedDistance(target, seq[i]);
         dists.push(d);
-        if (d < dists[idx]) idx = i;
       }
       // Score on the mean of the best ~5% of frames (min 1), not the single
       // best frame. A best-of-N minimum over hundreds of frames is an order
@@ -745,9 +743,12 @@ export function compare(input: CompareInput): AnalysisReport {
       // top set keeps "the user actually passes through the pro's position"
       // scoring high while a single lucky frame no longer carries the score.
       const k = Math.max(1, Math.round(seq.length * 0.05));
-      const best = [...dists].sort((a, b) => a - b).slice(0, k);
-      const dist = best.reduce((a, b) => a + b, 0) / best.length;
-      return { idx, dist };
+      const indices = dists
+        .map((_, i) => i)
+        .sort((a, b) => dists[a] - dists[b])
+        .slice(0, k);
+      const dist = indices.reduce((sum, i) => sum + dists[i], 0) / indices.length;
+      return { indices, dist };
     };
     const raw = bestMatch(augmentWithConf(userAnglesRaw, userConfRaw));
     const mir = bestMatch(augmentWithConf(userAnglesMirrored, userConfMirrored));
@@ -757,11 +758,17 @@ export function compare(input: CompareInput): AnalysisReport {
     proSide = mirrored ? opposite(userSide) : userSide;
     userAngles = mirrored ? userAnglesMirrored : userAnglesRaw;
     const chosen = mirrored ? mir : raw;
-    keyUserFrame = chosen.idx;
-    pairedPro = [target];
-    pairedUser = [userAngles[chosen.idx]];
+    keyUserFrame = chosen.indices[0];
+    // Use the same best-frame cohort for joint statistics that produced the
+    // headline distance. Previously the score averaged the best ~5% to resist
+    // a lucky one-frame match, but the coaching deltas still used only that
+    // single luckiest frame. A long unrelated clip could therefore receive a
+    // guarded low score while claiming every joint matched perfectly. The mesh
+    // and keyUserFrame remain the single closest pose for a clear snapshot.
+    pairedPro = chosen.indices.map(() => proAngles[0]);
+    pairedUser = chosen.indices.map((i) => userAngles[i]);
     const userConf = mirrored ? userConfMirrored : userConfRaw;
-    pairedW = [pairWeight(proConf[0], userConf[chosen.idx])];
+    pairedW = chosen.indices.map((i) => pairWeight(proConf[0], userConf[i]));
     distance = chosen.dist;
     similarity = [similarityFromDistance(chosen.dist)];
   }

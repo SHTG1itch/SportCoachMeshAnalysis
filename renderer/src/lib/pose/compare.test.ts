@@ -154,6 +154,37 @@ describe("compare", () => {
     expect(report.mesh!.keyIndex).toBe(0);
   });
 
+  it("single-frame coaching uses the same best-frame cohort as the score", () => {
+    const leaned = defaultFrame();
+    // Lean the shoulder line sideways while keeping the key wrist stationary,
+    // so active-window detection leaves the 100-frame clip intact.
+    leaned[L.LEFT_SHOULDER].x += 0.4;
+    leaned[L.RIGHT_SHOULDER].x += 0.4;
+    const userFrames = Array.from({ length: 100 }, () => defaultFrame());
+    // A smooth, brief pass through the reference pose: the best frame is very
+    // close, but the surrounding top cohort is materially different.
+    [0.1, 0.2, 0.3, 0.4, 0.3, 0.2, 0.1].forEach((shift, offset) => {
+      const frame = userFrames[47 + offset];
+      frame[L.LEFT_SHOULDER].x += shift;
+      frame[L.RIGHT_SHOULDER].x += shift;
+    });
+
+    const report = compare({
+      sport: SPORT,
+      shot: "Forehand",
+      pro: { frames: [leaned], fps: 1, kind: "image" },
+      user: { frames: userFrames, fps: 30 },
+    });
+    const trunk = report.jointDeltas.find((d) => d.joint === "trunk_lean")!;
+
+    expect(report.keyUserFrame).toBe(50);
+    // One perfect pose plus four upright poses make up the best 5%. The joint
+    // report must not pretend the lucky perfect frame represented the clip.
+    expect(Math.abs(trunk.signedBiasDeg)).toBeGreaterThan(7);
+    expect(trunk.significance).not.toBe("low");
+    expect(report.overallSimilarity).toBeLessThan(1);
+  });
+
   // A joint that is occluded (low visibility) in the only frame backing it must
   // not drive a confident coaching fault — confidence weighting can't rescue a
   // single low-visibility sample (single-frame "pro as image" mode). Found on
