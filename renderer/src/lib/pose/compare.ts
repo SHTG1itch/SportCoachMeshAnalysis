@@ -12,6 +12,7 @@ import type { Landmark3D, PoseFrame } from "./types";
 import {
   JOINT_FEATURES,
   computeAnglesSequence,
+  detectUpSign,
   featureConfidenceSequence,
 } from "./angles";
 import { normalizeAll } from "./normalize";
@@ -599,19 +600,25 @@ export function compare(input: CompareInput): AnalysisReport {
     frames: PoseFrame[],
     raw: PoseFrame[],
     fps: number,
-  ): [PoseFrame[], PoseFrame[], Side] => {
+  ): [PoseFrame[], PoseFrame[], Side, number] => {
     const side = detectDominantSide(raw, keyType);
     const w = activeWindow(frames, sidedJoint(side, keyType), fps);
-    if (w.start === 0 && w.end === frames.length - 1) return [frames, raw, side];
-    return [frames.slice(w.start, w.end + 1), raw.slice(w.start, w.end + 1), side];
+    if (w.start === 0 && w.end === frames.length - 1) return [frames, raw, side, 0];
+    return [frames.slice(w.start, w.end + 1), raw.slice(w.start, w.end + 1), side, w.start];
   };
   let proSideFromClip: Side | null = null;
   let userSideFromClip: Side | null = null;
+  // Crop offsets: everything internal (DTW path, phases, mesh) works in the
+  // cropped index space, but frame numbers REPORTED to the user must be in the
+  // original clip's space — the whole point of the crop is that the clip has
+  // pre-roll, so an uncorrected index points at idle footage.
+  let proCropStart = 0;
+  let userCropStart = 0;
   if (input.pro.kind === "video" && proFrames.length > 1) {
-    [proFrames, rawPro, proSideFromClip] = cropToActive(proFrames, rawPro, input.pro.fps);
+    [proFrames, rawPro, proSideFromClip, proCropStart] = cropToActive(proFrames, rawPro, input.pro.fps);
   }
   if (userFrames.length > 1) {
-    [userFrames, rawUser, userSideFromClip] = cropToActive(userFrames, rawUser, input.user.fps);
+    [userFrames, rawUser, userSideFromClip, userCropStart] = cropToActive(userFrames, rawUser, input.user.fps);
   }
 
   // Detection coverage over the segment actually compared (RAW frames, before
@@ -632,8 +639,17 @@ export function compare(input: CompareInput): AnalysisReport {
   // weight when smoothing moved a ratio across the threshold.
   const proConf = featureConfidenceSequence(rawPro, proFrames);
   const userConfRaw = featureConfidenceSequence(rawUser, userFrames);
-  const proRep = repairImplausible(computeAnglesSequence(proFrames), proConf);
-  const userRep = repairImplausible(computeAnglesSequence(userFrames), userConfRaw);
+  // ONE up-sign for the whole comparison, inferred from both clips pooled.
+  // Both come from the same extractor, so they share a convention by
+  // construction — and inferring per-clip broke the single-frame pro image: a
+  // one-frame "median" of a torso hinged past horizontal flips the vertical
+  // for the pro only, so trunk_lean comes back with the wrong sign/magnitude
+  // inside the plausibility band (the repair can't catch it) at full
+  // core-landmark confidence, flagging a user who matches the pose perfectly.
+  // The pooled median is dominated by whichever clip has real frame count.
+  const upSign = detectUpSign([...proFrames, ...userFrames]);
+  const proRep = repairImplausible(computeAnglesSequence(proFrames, upSign), proConf);
+  const userRep = repairImplausible(computeAnglesSequence(userFrames, upSign), userConfRaw);
   const proAngles = proRep.seq;
   const userAnglesRaw = userRep.seq;
   // Repaired frames are synthetic (interpolated/edge-held across a depth-flip
@@ -886,12 +902,19 @@ export function compare(input: CompareInput): AnalysisReport {
       mode === "sequence"
         ? { path, distance: +distance.toFixed(3), similarityTimeline: similarity }
         : null,
-    keyUserFrame,
+    // Reported frame numbers are in the ORIGINAL clip's index space (the UI
+    // points the user at "your frame #N"); internal consumers (mesh, path)
+    // stay in cropped space.
+    keyUserFrame: keyUserFrame === null ? null : keyUserFrame + userCropStart,
     handedness,
     coverage,
     overallSimilarity: +overall.toFixed(3),
     jointDeltas: sortedByImpact(jointDeltas),
-    phases,
+    phases: phases.map((p) => ({
+      ...p,
+      startFrame: p.startFrame + proCropStart,
+      endFrame: p.endFrame + proCropStart,
+    })),
     mesh,
     guide: null,
     workouts: [],

@@ -348,7 +348,7 @@ export function detectUpSign(frames: PoseFrame[]): number {
   return med < 0 ? -1 : 1;
 }
 
-export function computeAnglesSequence(frames: PoseFrame[]): number[][] {
-  const upSign = detectUpSign(frames);
-  return frames.map((f) => computeAngles(f, upSign));
+export function computeAnglesSequence(frames: PoseFrame[], upSign?: number): number[][] {
+  const sign = upSign ?? detectUpSign(frames);
+  return frames.map((f) => computeAngles(f, sign));
 }

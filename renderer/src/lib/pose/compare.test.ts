@@ -120,6 +120,100 @@ describe("compare", () => {
     expect(withIdle.overallSimilarity).toBeGreaterThan(0.9);
   });
 
+  it("reports frame numbers in the ORIGINAL clip space, not the cropped one", () => {
+    // Same swing/pre-roll construction as above. The active-window crop shifts
+    // every internal index; reported frame numbers must be shifted back or the
+    // UI points the user at their idle pre-roll.
+    const swingFrame = (t: number): PoseFrame => {
+      const f = defaultFrame();
+      const a = Math.sin(t * Math.PI);
+      f[L.RIGHT_WRIST] = { x: 0.35 + 0.6 * a, y: 0.85 + 0.5 * a, z: 0.2 * a, visibility: 1 };
+      f[L.RIGHT_ELBOW] = { x: 0.3 + 0.3 * a, y: 1.1 + 0.2 * a, z: 0.1 * a, visibility: 1 };
+      return f;
+    };
+    const swing = Array.from({ length: 30 }, (_, i) => swingFrame(i / 29));
+    const idle = () => defaultFrame();
+    const pad = (n: number, frames: PoseFrame[]) => [
+      ...Array.from({ length: n }, idle),
+      ...frames.map((f) => f.map((l) => ({ ...l }))),
+      ...Array.from({ length: n }, idle),
+    ];
+
+    // Single-frame mode: pro image of the mid-swing pose, user swing buried in
+    // 45 idle frames each side. The matching pose lives at original frame ~60.
+    const imageReport = compare({
+      sport: SPORT,
+      shot: "Forehand",
+      pro: { frames: [swingFrame(0.5)], fps: 1, kind: "image" },
+      user: { frames: pad(45, swing), fps: 30 },
+    });
+    expect(imageReport.mode).toBe("single_frame");
+    // Must land inside the swing (original frames 45..74), never in the idle
+    // pre-roll a cropped-space index would point at.
+    expect(imageReport.keyUserFrame).toBeGreaterThanOrEqual(45);
+    expect(imageReport.keyUserFrame).toBeLessThan(75);
+
+    // Sequence mode: pro clip with its own idle pre-roll — the phase ranges
+    // must cover the pro's ORIGINAL swing frames, not [0..29].
+    const seqReport = compare({
+      sport: SPORT,
+      shot: "Forehand",
+      pro: { frames: pad(45, swing), fps: 30, kind: "video" },
+      user: { frames: swing.map((f) => f.map((l) => ({ ...l }))), fps: 30 },
+    });
+    expect(seqReport.phases.length).toBeGreaterThan(0);
+    const first = seqReport.phases[0];
+    const last = seqReport.phases[seqReport.phases.length - 1];
+    expect(first.startFrame).toBeGreaterThan(30); // inside/near the swing, not 0
+    expect(last.endFrame).toBeLessThan(120);
+    expect(last.endFrame).toBeGreaterThan(45);
+  });
+
+  it("a user holding a hinged pro image's exact pose has no trunk_lean fault (shared up-sign)", () => {
+    // Pro reference image with the torso hinged PAST horizontal (shoulders
+    // below the hips — a bowling delivery, a fielding crouch). Per-clip up-sign
+    // inference on the one-frame "clip" flipped the vertical for the pro only:
+    // its trunk_lean came back with the wrong sign and magnitude, inside the
+    // plausibility band, at full confidence — so a user perfectly matching the
+    // pose was flagged with a severe, high-significance trunk fault. One
+    // pooled up-sign for both clips makes the comparison self-consistent.
+    // t = 0 → upright, t = 1 → hinged 95° past vertical (shoulders below
+    // the hips), hips pinned. Torso length stays ~0.5.
+    const hingedBy = (t: number): PoseFrame => {
+      const f = defaultFrame();
+      const a = (t * 95 * Math.PI) / 180;
+      const y = 0.9 + 0.5 * Math.cos(a);
+      const z = -0.5 * Math.sin(a);
+      f[L.LEFT_SHOULDER] = { x: -0.2, y, z, visibility: 1 };
+      f[L.RIGHT_SHOULDER] = { x: 0.2, y, z, visibility: 1 };
+      return f;
+    };
+    // User: mostly UPRIGHT (so the user clip's own up-sign inference reads
+    // y-up), folding smoothly into the pro's exact hinged pose, holding it —
+    // the image-mode best-match cohort — and unfolding. Per-clip inference
+    // gave the one-frame pro the OPPOSITE sign from the user, so
+    // exactly-matching frames compared as wildly different trunk leans.
+    const fold = (i: number) =>
+      i < 14 ? 0 : i < 22 ? (i - 14) / 8 : i < 30 ? 1 : Math.max(0, 1 - (i - 30) / 8);
+    const user = Array.from({ length: 44 }, (_, i) => {
+      const f = hingedBy(fold(i));
+      // Right-wrist waggle only during the upright lead-in, so handedness and
+      // the active window have signal while the fold/hold matches the pro
+      // image EXACTLY (wrist back at its default 0.35).
+      if (i < 12) f[L.RIGHT_WRIST] = { x: 0.35 + 0.2 * Math.sin((i / 11) * Math.PI), y: 0.85, z: 0, visibility: 1 };
+      return f;
+    });
+    const report = compare({
+      sport: SPORT,
+      shot: "Forehand",
+      pro: { frames: [hingedBy(1)], fps: 1, kind: "image" },
+      user: { frames: user, fps: 30 },
+    });
+    const lean = report.jointDeltas.find((d) => d.joint === "trunk_lean")!;
+    expect(Math.abs(lean.signedBiasDeg)).toBeLessThan(10);
+    expect(lean.significance).toBe("low");
+  });
+
   it("attaches a downsampled, aligned skeleton mesh for the visual comparison", () => {
     const frames = Array.from({ length: 60 }, () => defaultFrame());
     const report = compare({
