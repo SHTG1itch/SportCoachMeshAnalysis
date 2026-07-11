@@ -68,6 +68,38 @@ describe("detectDominantSide", () => {
     });
     expect(detectDominantSide(frames, "wrist")).toBe("right");
   });
+
+  it("is not fooled by label-flip spikes on the off arm", () => {
+    // Real swing on the RIGHT. The LEFT wrist mostly idles, but on a few
+    // frames the detector confuses the arms and the left landmark jumps to the
+    // right wrist's position and back (a mid-clip L/R label flip, seen at full
+    // visibility). Under a variance metric those jumps fabricate more "motion"
+    // than the actual swing; robust statistics must shrug them off.
+    const frames = swingSeq("right").map((f, i) => {
+      if (i === 3 || i === 7) {
+        f[L.LEFT_WRIST] = { ...f[L.RIGHT_WRIST] };
+      }
+      return f;
+    });
+    expect(detectDominantSide(frames, "wrist")).toBe("right");
+  });
+
+  it("prefers the fast swinging arm over a wide slow arc on the off arm", () => {
+    // Forehand-like clip: the off (left) arm sweeps a wide but SLOW arc during
+    // the unit turn — more positional range than the racket wrist — while the
+    // right wrist travels less ground but at swing speed. The working arm is
+    // the fast one.
+    const frames = Array.from({ length: 20 }, (_, i) => {
+      const f = standingFrame();
+      // Left wrist: wide slow sweep, total 1.0 across 20 frames.
+      f[L.LEFT_WRIST] = { x: -0.9 + i * 0.05, y: 0.85, z: 0, visibility: 1 };
+      // Right wrist: idle, then a 4-frame explosive swing covering 0.6.
+      const swing = i >= 12 && i < 16 ? (i - 12) * 0.2 : i >= 16 ? 0.6 : 0;
+      f[L.RIGHT_WRIST] = { x: 0.35 + swing, y: 0.85 - swing * 0.4, z: 0, visibility: 1 };
+      return f;
+    });
+    expect(detectDominantSide(frames, "wrist")).toBe("right");
+  });
 });
 
 describe("mirrorAngleVector", () => {

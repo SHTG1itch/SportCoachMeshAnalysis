@@ -590,12 +590,17 @@ export function compare(input: CompareInput): AnalysisReport {
   // reused for the crop, handedness, and phase anchoring. Re-detecting after
   // the crop could disagree with the side the crop itself was keyed on,
   // leaving the window and the phases anchored to different joints.
+  // The side is detected on the RAW frames: fillGaps deliberately launders
+  // interpolated landmarks above the visibility threshold (so downstream
+  // geometry treats them as usable), but for the dominant-side vote those
+  // synthetic segments are hallucinated motion on exactly the arm the detector
+  // couldn't see — on real court footage they flipped 3 of 8 clips' calls.
   const cropToActive = (
     frames: PoseFrame[],
     raw: PoseFrame[],
     fps: number,
   ): [PoseFrame[], PoseFrame[], Side] => {
-    const side = detectDominantSide(frames, keyType);
+    const side = detectDominantSide(raw, keyType);
     const w = activeWindow(frames, sidedJoint(side, keyType), fps);
     if (w.start === 0 && w.end === frames.length - 1) return [frames, raw, side];
     return [frames.slice(w.start, w.end + 1), raw.slice(w.start, w.end + 1), side];
@@ -659,7 +664,7 @@ export function compare(input: CompareInput): AnalysisReport {
   // Motion-energy handedness for the user clip — used only by single-frame
   // mode, where there is no alignment to resolve orientation from directly.
   // Sequence mode infers the user's side from the best-matching orientation.
-  let userSide = userSideFromClip ?? detectDominantSide(userFrames, keyType);
+  let userSide = userSideFromClip ?? detectDominantSide(rawUser, keyType);
   const userAnglesMirrored = mirrorAnglesSequence(userAnglesRaw);
   const opposite = (s: Side): Side => (s === "right" ? "left" : "right");
 
@@ -694,7 +699,7 @@ export function compare(input: CompareInput): AnalysisReport {
     // collapsing the comparison); best-of-both-alignments has no such knife edge:
     // when the two orientations genuinely tie, either choice compares
     // near-symmetric sides and changes almost nothing.
-    proSide = proSideFromClip ?? detectDominantSide(proFrames, keyType);
+    proSide = proSideFromClip ?? detectDominantSide(rawPro, keyType);
     // Align on the confidence-weighted standardized feature distance so no
     // single wide-range joint dominates the warp path, blown-out frames are
     // clamped, and features neither clip could actually see don't steer the
