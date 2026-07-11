@@ -1,14 +1,65 @@
 import { describe, expect, it } from "vitest";
+import type { PoseLandmarkerResult } from "@mediapipe/tasks-vision";
 import { __testing } from "./landmarker";
 import { L, type PoseFrame } from "./types";
 
-const { mergeTta, unmirrorFrame, TTA_AGREE_M } = __testing;
+const { mergeTta, toFrame, unmirrorFrame, TTA_AGREE_M } = __testing;
 
 function frame(): PoseFrame {
   const f: PoseFrame = [];
   for (let i = 0; i < 33; i++) f.push({ x: i * 0.01, y: 1 - i * 0.01, z: i * 0.002, visibility: 0.9 });
   return f;
 }
+
+function resultFrame(
+  world: Array<{ x: number; y: number; z: number; visibility?: number }>,
+  imageVisibility: number[] = [],
+): PoseLandmarkerResult {
+  return {
+    worldLandmarks: [world],
+    landmarks: [world.map((l, i) => ({
+      ...l,
+      visibility: imageVisibility[i],
+    }))],
+  } as unknown as PoseLandmarkerResult;
+}
+
+describe("toFrame", () => {
+  it("uses finite image-space visibility as a fallback and clamps probabilities", () => {
+    const world: Array<{ x: number; y: number; z: number; visibility?: number }> =
+      frame().map(({ x, y, z, visibility }) => ({ x, y, z, visibility }));
+    world[0].visibility = undefined;
+    world[1].visibility = Number.NaN;
+    world[2].visibility = 4;
+    world[3].visibility = -2;
+
+    const converted = toFrame(resultFrame(world, [0.65, 0.45]));
+
+    expect(converted?.[0].visibility).toBe(0.65);
+    expect(converted?.[1].visibility).toBe(0.45);
+    expect(converted?.[2].visibility).toBe(1);
+    expect(converted?.[3].visibility).toBe(0);
+  });
+
+  it("turns non-finite coordinates into an honestly missing landmark", () => {
+    const world = frame().map(({ x, y, z, visibility }) => ({ x, y, z, visibility }));
+    world[L.LEFT_WRIST] = {
+      x: Number.NaN,
+      y: Number.POSITIVE_INFINITY,
+      z: 0,
+      visibility: 0.99,
+    };
+
+    const converted = toFrame(resultFrame(world));
+
+    expect(converted?.[L.LEFT_WRIST]).toEqual({ x: 0, y: 0, z: 0, visibility: 0 });
+  });
+
+  it("rejects incomplete world-landmark output", () => {
+    const short = frame().slice(0, 32);
+    expect(toFrame(resultFrame(short))).toBeNull();
+  });
+});
 
 describe("unmirrorFrame", () => {
   it("negates x and swaps left/right partners", () => {

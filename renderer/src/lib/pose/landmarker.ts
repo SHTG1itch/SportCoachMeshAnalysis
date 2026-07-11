@@ -122,14 +122,29 @@ function toFrame(result: PoseLandmarkerResult): PoseFrame | null {
   const out: PoseFrame = [];
   for (let i = 0; i < 33; i++) {
     const l = lms[i];
+    const worldVisibility = (l as { visibility?: number }).visibility;
+    const imageVisibility = (norm?.[i] as { visibility?: number } | undefined)
+      ?.visibility;
+    const rawVisibility = Number.isFinite(worldVisibility)
+      ? worldVisibility!
+      : Number.isFinite(imageVisibility)
+        ? imageVisibility!
+        : 0;
+    // A decoder/model/runtime failure must enter the cleanup pipeline as a
+    // missing landmark, not as NaN/Infinity. One non-finite coordinate would
+    // otherwise survive visibility gating, poison interpolation + smoothing,
+    // and eventually turn every score and persisted mesh coordinate into NaN.
+    const coordinatesAreFinite =
+      Number.isFinite(l.x) && Number.isFinite(l.y) && Number.isFinite(l.z);
     const lm: Landmark3D = {
-      x: l.x,
-      y: l.y,
-      z: l.z,
-      visibility:
-        (l as { visibility?: number }).visibility ??
-        (norm?.[i] as { visibility?: number } | undefined)?.visibility ??
-        0,
+      x: coordinatesAreFinite ? l.x : 0,
+      y: coordinatesAreFinite ? l.y : 0,
+      z: coordinatesAreFinite ? l.z : 0,
+      // MediaPipe documents visibility as a probability. Clamp defensively so
+      // malformed native/WASM output cannot amplify confidence weighting.
+      visibility: coordinatesAreFinite
+        ? Math.max(0, Math.min(1, rawVisibility))
+        : 0,
     };
     out.push(lm);
   }
@@ -371,6 +386,7 @@ export async function extractVideo(
  */
 export const __testing = {
   getLandmarker,
+  toFrame,
   mergeTta,
   unmirrorFrame,
   mirrorOnCanvas,
