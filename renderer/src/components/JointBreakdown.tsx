@@ -53,7 +53,9 @@ export function JointBreakdown({ deltas }: Props) {
             ? "matches the pro's average"
             : d.signedBiasDeg > 0
               ? `+${d.signedBiasDeg.toFixed(1)}° more than pro`
-              : `${d.signedBiasDeg.toFixed(1)}° less than pro`;
+              : // Magnitude only: the direction word already carries the sign
+                // ("-12.3° less" double-encodes and reads as its opposite).
+                `${Math.abs(d.signedBiasDeg).toFixed(1)}° less than pro`;
         // Bar width scales the systematic gap (|signed bias|) against 30° max —
         // this is the coachable difference that also drives significance.
         const gap = Math.abs(d.signedBiasDeg);

@@ -432,7 +432,12 @@ function buildDelta(
   // could not actually see.
   let sumW = 0;
   for (let i = 0; i < n; i++) sumW += ws[i];
-  const avgConf = weights ? sumW / n : 1;
+  // Rounded FIRST, then gated: the gate and every consumer of the persisted
+  // value (jointNotSeen, confidentlySeen, the coach fallbacks) must agree on
+  // which side of VIS_THRESHOLD this joint sits. Gating the raw value let a
+  // raw 0.2995 be refused a flag here yet persist as 0.3 — rendered as a
+  // measured green row and eligible for praise/workouts downstream.
+  const avgConf = +(weights ? sumW / n : 1).toFixed(3);
   return {
     joint: feat.name,
     label: feat.label,
@@ -447,7 +452,7 @@ function buildDelta(
     significance: avgConf < VIS_THRESHOLD ? "low" : significance(Math.abs(signedBias)),
     // Persisted so the coach can tell a "low" that means WELL-MATCHED from a
     // "low" that means NOT-SEEN (its fallback must never train unseen joints).
-    avgConf: +avgConf.toFixed(3),
+    avgConf,
   };
 }
 
@@ -655,9 +660,14 @@ export function compare(input: CompareInput): AnalysisReport {
   // Repaired frames are synthetic (interpolated/edge-held across a depth-flip
   // run) yet carried the flip frames' original — high — detector confidence.
   // Cap them at the TTA-disagreement level (below VIS_THRESHOLD) so fabricated
-  // values can't steer the alignment or the deltas at full weight. Done AFTER
-  // repair so the cap can't disturb the repair's own anchor selection, and
-  // BEFORE mirroring so the mirrored confidence copy inherits it.
+  // values can't drive the per-joint deltas at full weight and so avgConf can
+  // gate significance honestly. Note this does NOT down-weight the frame in
+  // the DTW cost or the similarity timeline: weightedStandardizedDistance
+  // normalizes by total weight, so a uniform per-frame scale cancels there —
+  // accepted, since repaired values are plausible interpolations, not garbage,
+  // and alignment only needs them to be roughly right. Done AFTER repair so
+  // the cap can't disturb the repair's own anchor selection, and BEFORE
+  // mirroring so the mirrored confidence copy inherits it.
   const REPAIRED_CONF_CAP = 0.25;
   const capRepaired = (conf: number[][], repaired: boolean[]) => {
     for (let i = 0; i < conf.length; i++) {

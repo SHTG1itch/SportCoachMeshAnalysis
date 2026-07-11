@@ -378,10 +378,16 @@ function numericClause(d: JointDelta): string {
   // otherwise describe the bias itself so the sentence never contradicts its
   // own parenthetical.
   const dirWord = d.signedBiasDeg >= 0 ? "more" : "less";
-  const meanDiff = d.userMeanDeg - d.proMeanDeg;
-  const diff = Math.round(Math.abs(meanDiff));
-  if (diff >= 1 && Math.sign(meanDiff) === Math.sign(d.signedBiasDeg)) {
-    return `(you average ${Math.round(d.userMeanDeg)}° vs the pro's ${Math.round(d.proMeanDeg)}°, about ${diff}° ${dirWord})`;
+  // Work from the ROUNDED means — the numbers the sentence will actually
+  // print. Guarding on the unrounded difference reintroduced the bug at the
+  // rounding boundary: user 100.4 vs pro 99.6 passed the guard (diff 0.8 → "1°
+  // more") yet printed "100° vs 100°"; 100.7 vs 99.3 printed numbers 2° apart
+  // while claiming "about 1°".
+  const userR = Math.round(d.userMeanDeg);
+  const proR = Math.round(d.proMeanDeg);
+  const diff = userR - proR;
+  if (Math.abs(diff) >= 1 && Math.sign(diff) === Math.sign(d.signedBiasDeg)) {
+    return `(you average ${userR}° vs the pro's ${proR}°, about ${Math.abs(diff)}° ${dirWord})`;
   }
   return `(about ${Math.round(gapDeg(d))}° ${dirWord} through the swing, even though the whole-clip averages nearly match)`;
 }
@@ -527,14 +533,23 @@ function buildGuide(req: GuideRequest): ImprovementGuide {
       (d) =>
         `Your ${MECHANICS[jointKey(d.joint)].group} closely matches the pro (within ${Math.max(1, Math.round(Math.max(gapDeg(d), d.meanDeltaDeg)))}°).`,
     );
+  // A joint whose "low" significance came from the confidence gate was never
+  // measured; when NOTHING was confidently seen, the summary below disclaims
+  // the similarity number as a guess — the strengths card must not turn
+  // around and praise that same number as "a solid base".
+  const anySeen = deltas.some(confidentlySeen);
   const strengths =
     matched.length > 0
       ? matched
-      : simPct >= 60
-        ? [`Overall mesh similarity is ${simPct}% — a solid base to build on.`]
-        : [
-            `You have a complete, comparable rep on film — closing the gaps below is what will move your ${simPct}% similarity up.`,
-          ];
+      : !anySeen
+        ? [
+            `You got a rep on film — with your whole body in frame and better light, the next one gets a real joint-by-joint breakdown.`,
+          ]
+        : simPct >= 60
+          ? [`Overall mesh similarity is ${simPct}% — a solid base to build on.`]
+          : [
+              `You have a complete, comparable rep on film — closing the gaps below is what will move your ${simPct}% similarity up.`,
+            ];
 
   const cues = Array.from(
     new Set(top.map((d) => resolveKnowledge(d.joint, d.signedBiasDeg >= 0 ? "more" : "less").cue)),
@@ -550,10 +565,15 @@ function buildGuide(req: GuideRequest): ImprovementGuide {
   // mismatch lives in timing/dynamics rather than average positions (low
   // similarity, small biases). Praising "closely mirrors the pro" next to a
   // low similarity number contradicts itself in one sentence.
-  const anySeen = deltas.some(confidentlySeen);
   let summary: string;
   if (issueCount > 0) {
-    summary = `Your ${shot} reaches ${simPct}% overall mesh similarity to the pro, with ${issueCount} joint${issueCount > 1 ? "s" : ""} to bring into line. The biggest is your ${titleCase(resolveKnowledge(top[0].joint, top[0].signedBiasDeg >= 0 ? "more" : "less").group)} (${Math.round(gapDeg(top[0]))}° off). Close each gap by matching the pro's position and training the muscles that drive it.`;
+    // The focus-area cards render only `top` (max 4); when more groups were
+    // flagged, say so explicitly instead of promising 7 issues and showing 4.
+    const countClause =
+      issueCount > top.length
+        ? `${issueCount} joints to bring into line — the top ${top.length} are below`
+        : `${issueCount} joint${issueCount > 1 ? "s" : ""} to bring into line`;
+    summary = `Your ${shot} reaches ${simPct}% overall mesh similarity to the pro, with ${countClause}. The biggest is your ${titleCase(resolveKnowledge(top[0].joint, top[0].signedBiasDeg >= 0 ? "more" : "less").group)} (${Math.round(gapDeg(top[0]))}° off). Close each gap by matching the pro's position and training the muscles that drive it.`;
   } else if (!anySeen) {
     summary = `We couldn't see enough of your body clearly to coach specific joints — overall mesh similarity reads ${simPct}%, but the joint detail is a guess. Re-film with your whole body in frame, decent light and the camera side-on for a full breakdown.`;
   } else if (simPct >= 70) {
@@ -659,11 +679,17 @@ function buildWorkouts(req: GuideRequest): Workout[] {
       ),
     );
 
-  const muscleSummary = genericTargets
-    ? listProse(muscleLabelsList)
-    : muscles
-        .map((m) => `${m.k.label} (${m.forGroups.join("/")}, ${Math.round(m.gap)}°)`)
-        .join(", ");
+  // No flagged mismatch (targets are the seen-joint fallback): the workouts
+  // are maintenance, and the focus text must not claim these are "mismatches"
+  // — with every gap ~0° that read "driving your biggest mismatches
+  // (elbow, 0°)" on a near-perfect comparison.
+  const maintenance = flagged.length === 0 && !genericTargets;
+  const muscleSummary =
+    genericTargets || maintenance
+      ? listProse(muscleLabelsList)
+      : muscles
+          .map((m) => `${m.k.label} (${m.forGroups.join("/")}, ${Math.round(m.gap)}°)`)
+          .join(", ");
 
   // 1. Mobility & activation — free up and switch on the implicated muscles.
   const w1Warm = muscles.slice(0, 4).map((m) => m.k.mobilize);
@@ -674,7 +700,9 @@ function buildWorkouts(req: GuideRequest): Workout[] {
     title: "Mobility & activation",
     focus: genericTargets
       ? `Free up and switch on the foundation muscles for your ${shot}: ${listProse(muscleLabelsList.slice(0, 4))}. (No joint was seen clearly enough to target specific gaps.)`
-      : `Free up and switch on the muscles behind your ${shot} mesh gaps: ${listProse(muscleLabelsList.slice(0, 4))}.`,
+      : maintenance
+        ? `Free up and switch on the key muscles for your ${shot}: ${listProse(muscleLabelsList.slice(0, 4))}.`
+        : `Free up and switch on the muscles behind your ${shot} mesh gaps: ${listProse(muscleLabelsList.slice(0, 4))}.`,
     durationMin: dur([...w1Warm, ...w1Main, ...w1Cool]),
     difficulty: "beginner",
     equipment: ["resistance band"],
@@ -702,7 +730,9 @@ function buildWorkouts(req: GuideRequest): Workout[] {
     title: "Corrective strength",
     focus: genericTargets
       ? `Build general strength for your ${shot} across ${muscleSummary}.`
-      : `Strengthen the muscle groups driving your biggest mismatches with the pro: ${muscleSummary}.`,
+      : maintenance
+        ? `No consistent gaps vs the pro stood out — keep the muscle groups behind your ${shot} strong: ${muscleSummary}.`
+        : `Strengthen the muscle groups driving your biggest mismatches with the pro: ${muscleSummary}.`,
     durationMin: dur([...w2Warm, ...w2Main, ...w2Cool]),
     difficulty,
     equipment: ["dumbbells", "cable or band", "bench"],
@@ -724,11 +754,26 @@ function buildWorkouts(req: GuideRequest): Workout[] {
   const w3Holds: WorkoutStep[] = targets.slice(0, 3).map((d) => {
     const dir: Dir = d.signedBiasDeg >= 0 ? "more" : "less";
     const t = resolveKnowledge(d.joint, dir);
+    // Quote the two clip means only when their ROUNDED difference points the
+    // same way as the flagged bias (same guard as numericClause): they are
+    // independently-trimmed statistics, and on outlier-heavy clips the printed
+    // numbers can instruct moving the angle the OPPOSITE way from the cue on
+    // the same rep card. Otherwise phrase the hold from the bias itself.
+    const gap = Math.round(gapDeg(d));
+    const userR = Math.round(d.userMeanDeg);
+    const proR = Math.round(d.proMeanDeg);
+    const meansAgree = Math.abs(userR - proR) >= 1 && Math.sign(userR - proR) === Math.sign(d.signedBiasDeg);
+    const description =
+      gap < 1
+        ? `Set your ${t.group} to match the pro's position and hold; film side-on and compare to keep it locked in.`
+        : meansAgree
+          ? `Set your ${t.group} to the pro's ~${proR}° (you average ${userR}°) and hold; film side-on and compare to close the ~${gap}° gap.`
+          : `Hold your ${t.group} angle about ${gap}° ${dir === "more" ? "lower" : "higher"} than your usual position; film side-on and compare against the pro to close the gap.`;
     return {
       name: `Match-the-pro hold — ${t.group}`,
       sets: 3,
       reps: "20-30s holds",
-      description: `Set your ${t.group} to the pro's ~${Math.round(d.proMeanDeg)}° (you average ${Math.round(d.userMeanDeg)}°) and hold; film side-on and compare to close the ~${Math.round(gapDeg(d))}° gap.`,
+      description,
       cues: [t.cue],
     };
   });

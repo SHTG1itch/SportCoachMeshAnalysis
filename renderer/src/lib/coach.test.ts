@@ -418,6 +418,97 @@ describe("native coach engine", () => {
     expect(obs).toContain("14°"); // falls back to the coachable bias
   });
 
+  it("numeric clause never prints identical or wrong-way rounded means", () => {
+    // Rounding straddle: unrounded diff 0.8 passed the old guard ("about 1°
+    // more") while the printed means both rounded to 100°.
+    const equalPrint: JointDelta = {
+      ...delta("right_elbow", 16, 8, "high"),
+      proMeanDeg: 99.6,
+      userMeanDeg: 100.4,
+    };
+    const g1 = generateGuideAndWorkouts(req({ jointDeltas: [equalPrint] })).guide;
+    expect(g1.keyIssues[0].observation).not.toMatch(/(\d+)° vs the pro's \1°/);
+    // Printed numbers 2° apart must not claim "about 1°".
+    const offByOne: JointDelta = {
+      ...delta("right_elbow", 16, 8, "high"),
+      proMeanDeg: 99.3,
+      userMeanDeg: 100.7,
+    };
+    const g2 = generateGuideAndWorkouts(req({ jointDeltas: [offByOne] })).guide;
+    const m = g2.keyIssues[0].observation.match(/you average (\d+)° vs the pro's (\d+)°, about (\d+)°/);
+    if (m) {
+      expect(Number(m[1]) - Number(m[2])).toBe(Number(m[3]));
+    }
+  });
+
+  it("match-the-pro holds never instruct the opposite direction from their cue", () => {
+    // Flagged LESS (user straighter → should bend more / raise the angle), but
+    // the independently-trimmed means point the other way. The hold must not
+    // quote numbers that tell the user to LOWER the angle.
+    const contrarian: JointDelta = {
+      ...delta("right_elbow", 18, -10, "high"),
+      proMeanDeg: 100,
+      userMeanDeg: 108,
+    };
+    const { workouts } = generateGuideAndWorkouts(req({ jointDeltas: [contrarian] }));
+    const hold = workouts
+      .flatMap((w) => w.main)
+      .find((s) => s.name.startsWith("Match-the-pro hold"))!;
+    expect(hold.description).not.toContain("108°");
+    expect(hold.description).toContain("higher");
+  });
+
+  it("summary issue count matches what the focus areas actually show", () => {
+    // 6 flagged groups but only 4 rendered cards: the summary must not promise
+    // six and show four with no acknowledgement.
+    const many = [
+      delta("right_elbow", 30, 30, "high"),
+      delta("right_shoulder", 28, 28, "high"),
+      delta("right_hip", 26, 26, "high"),
+      delta("right_knee", 24, 24, "high"),
+      delta("right_ankle", 22, 22, "high"),
+      delta("trunk_rotation", 20, 20, "high"),
+    ];
+    const { guide } = generateGuideAndWorkouts(req({ jointDeltas: many }));
+    expect(guide.keyIssues.length).toBe(4);
+    expect(guide.summary).toContain("top 4");
+  });
+
+  it("does not praise the similarity number the summary just disclaimed", () => {
+    // Nothing confidently seen: summary says the joint detail is a guess and
+    // asks for a re-film; strengths must not call the same number a solid base.
+    const unseen = [
+      { ...delta("right_elbow", 5, 2, "low"), avgConf: 0.1 },
+      { ...delta("right_knee", 4, 1, "low"), avgConf: 0.1 },
+    ];
+    const { guide } = generateGuideAndWorkouts(
+      req({ overallSimilarity: 0.62, jointDeltas: unseen }),
+    );
+    expect(guide.summary).toContain("Re-film");
+    for (const s of guide.strengths) {
+      expect(s).not.toContain("62%");
+      expect(s).not.toContain("solid base");
+    }
+  });
+
+  it("maintenance workouts don't cite 0° 'mismatches' when nothing is flagged", () => {
+    // Near-perfect comparison: all deltas low-but-seen. Workouts fall back to
+    // the largest seen gaps; their focus text must read as maintenance, not
+    // "your biggest mismatches (elbow, 0°)".
+    const near = [
+      { ...delta("right_elbow", 0.3, 0.1, "low"), avgConf: 0.9 },
+      { ...delta("right_knee", 0.2, 0.1, "low"), avgConf: 0.9 },
+      { ...delta("right_hip", 0.2, 0, "low"), avgConf: 0.9 },
+    ];
+    const { workouts } = generateGuideAndWorkouts(
+      req({ overallSimilarity: 0.98, jointDeltas: near }),
+    );
+    for (const w of workouts) {
+      expect(w.focus).not.toContain("mismatches");
+      expect(w.focus).not.toMatch(/0°/);
+    }
+  });
+
   it("phase advice is not anchored on a phase the detector barely saw", () => {
     const phaseHit = (conf: number): JointDelta => ({
       ...delta("right_elbow", 30, 30, "high"),
