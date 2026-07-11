@@ -1,4 +1,13 @@
-import { ArrowRight, Dumbbell, Plus, Target, Timer } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Dumbbell,
+  ScanLine,
+  ShieldCheck,
+  Sparkles,
+  Timer,
+  Waypoints,
+} from "lucide-react";
 import { SPORTS } from "../lib/sports";
 import { useStore } from "../store";
 
@@ -9,30 +18,63 @@ export function Home() {
   const loaded = useStore((s) => s.loaded);
 
   return (
-    <div className="space-y-10">
-      <section>
-        <h1 className="h1">Train against the pros.</h1>
-        <p className="mt-2 text-ink-300 max-w-xl">
-          Upload a pro's technique and a clip of your own. Mesh Coach rebuilds a 3D skeleton
-          for each, compares every joint frame-by-frame, and writes you a specific coaching
-          plan.
-        </p>
-        <div className="mt-6 flex items-center gap-3">
-          <button onClick={() => go({ name: "new" })} className="btn-primary">
-            <Plus size={14} /> New analysis
-          </button>
-          <button onClick={() => go({ name: "workouts" })} className="btn-ghost">
-            <Dumbbell size={14} /> My workouts
-          </button>
+    <div className="space-y-9">
+      <section className="hero-panel p-7 md:p-9" aria-labelledby="home-heading">
+        <div className="relative z-10 grid gap-8 xl:grid-cols-[1.25fr_0.75fr] xl:items-end">
+          <div>
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-accent-500/25 bg-accent-500/10 px-3 py-1 text-xs font-medium text-accent-400">
+              <ScanLine size={13} aria-hidden="true" /> Private, on-device motion intelligence
+            </div>
+            <h1 id="home-heading" className="max-w-2xl text-4xl font-semibold tracking-[-0.035em] text-ink-50 md:text-5xl">
+              See your technique through a coach's eyes.
+            </h1>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-ink-300">
+              Compare your movement with a professional reference. Mesh Coach reconstructs
+              both athletes in 3D, aligns the motion frame by frame, and turns the difference
+              into a focused training plan.
+            </p>
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              <button onClick={() => go({ name: "new" })} className="btn-primary px-5 py-2.5">
+                Start an analysis <ArrowRight size={15} aria-hidden="true" />
+              </button>
+              <button onClick={() => go({ name: "workouts" })} className="btn-ghost px-5 py-2.5">
+                <Dumbbell size={15} aria-hidden="true" /> My workouts
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 xl:grid-cols-1" aria-label="How analysis works">
+            {[
+              { step: "01", title: "Capture", detail: "Add two clear clips", Icon: ScanLine },
+              { step: "02", title: "Compare", detail: "Align every joint", Icon: Waypoints },
+              { step: "03", title: "Improve", detail: "Train what matters", Icon: Sparkles },
+            ].map(({ step, title, detail, Icon }) => (
+              <div key={step} className="metric-card flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-accent-500/20 bg-accent-500/10 text-accent-400">
+                  <Icon size={16} aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[10px] font-semibold tracking-widest text-ink-500">{step}</span>
+                    <span className="text-sm font-semibold text-ink-50">{title}</span>
+                  </div>
+                  <div className="truncate text-xs text-ink-400">{detail}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
       <section>
         <div className="flex items-center justify-between mb-4">
-          <div className="h2">Pick a sport to start</div>
+          <div>
+            <h2 className="h2">Choose your discipline</h2>
+            <p className="mt-1 text-sm text-ink-400">Start with a movement-specific comparison.</p>
+          </div>
           <button
             onClick={() => go({ name: "new" })}
-            className="text-sm text-accent-400 hover:text-accent-300 flex items-center gap-1"
+            className="focus-ring flex items-center gap-1 rounded text-sm text-accent-400 hover:text-accent-300"
           >
             Open full picker <ArrowRight size={14} />
           </button>
@@ -42,10 +84,19 @@ export function Home() {
             <button
               key={s.id}
               onClick={() => go({ name: "new", sportId: s.id })}
-              className="card p-4 text-left hover:border-accent-500/40 hover:-translate-y-0.5 transition-all focus-ring"
+              className="card group p-4 text-left hover:border-accent-500/40 hover:-translate-y-0.5 transition-all focus-ring"
             >
-              <div className="text-base font-semibold text-ink-50">{s.name}</div>
-              <div className="text-xs text-ink-400 mt-1">{s.shots.length} motions</div>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-base font-semibold text-ink-50">{s.name}</div>
+                  <div className="text-xs text-ink-400 mt-1">{s.shots.length} motions</div>
+                </div>
+                <ArrowUpRight
+                  size={15}
+                  aria-hidden="true"
+                  className="mt-0.5 text-ink-500 transition-colors group-hover:text-accent-400"
+                />
+              </div>
             </button>
           ))}
         </div>
@@ -109,7 +160,7 @@ export function Home() {
 
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-3">
-            <Target size={16} className="text-ok" />
+            <ShieldCheck size={16} className="text-ok" />
             <div className="h3 m-0">Saved workouts</div>
           </div>
           {!loaded ? (
