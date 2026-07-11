@@ -163,6 +163,59 @@ describe("computeAngles", () => {
     expect(featureConfidence(upright)[idx]).toBe(1);
   });
 
+  it("trunk lean is zeroed AND de-confidenced when the hip line degenerates to vertical", () => {
+    // Rolled/inverted pose: the hip line runs nearly straight down, so the
+    // body-relative "front" (up × hipLine) that signs the lean is a noise-scale
+    // vector. A ±2 cm residue then flips a ~90° lean's sign at full landmark
+    // visibility — and a ±90° swing stays under the repair threshold, so
+    // nothing downstream catches it.
+    const mk = (residue: number) =>
+      mkFrame({
+        [L.LEFT_HIP]: [0, 1, 0],
+        [L.RIGHT_HIP]: [residue, 0, residue],
+        // Torso axis horizontal (shoulders out along x from the hip midpoint).
+        [L.LEFT_SHOULDER]: [1, 0.5, -0.15],
+        [L.RIGHT_SHOULDER]: [1, 0.5, 0.15],
+      });
+    const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_lean");
+    for (const r of [0.02, -0.02]) {
+      expect(computeAngles(mk(r))[idx]).toBe(0);
+      expect(featureConfidence(mk(r))[idx]).toBe(0);
+    }
+    // A normal upright pose is untouched by the gate.
+    const upright = mkFrame({
+      [L.LEFT_SHOULDER]: [-0.3, 2, 0],
+      [L.RIGHT_SHOULDER]: [0.3, 2, 0],
+      [L.LEFT_HIP]: [-0.3, 1, 0],
+      [L.RIGHT_HIP]: [0.3, 1, 0],
+    });
+    expect(featureConfidence(upright)[idx]).toBe(1);
+  });
+
+  it("featureConfidence gates geometry on the cleaned frame when one is provided", () => {
+    // Value gates run on CLEANED frames, so the confidence gate must judge the
+    // same geometry: a raw frame whose projection ratio sits just above the
+    // threshold while smoothing drags the cleaned ratio below it would
+    // otherwise emit a hard-zeroed angle at full confidence.
+    const rawOk = mkFrame({
+      [L.LEFT_SHOULDER]: [-0.3, 2, 0],
+      [L.RIGHT_SHOULDER]: [0.3, 2, 0],
+      [L.LEFT_HIP]: [-0.3, 1, 0],
+      [L.RIGHT_HIP]: [0.3, 1, 0],
+    });
+    const cleanedDegenerate = mkFrame({
+      [L.LEFT_SHOULDER]: [0.02, 2, -0.01],
+      [L.RIGHT_SHOULDER]: [-0.01, 1, 0.02],
+      [L.LEFT_HIP]: [-0.3, 1.5, 0],
+      [L.RIGHT_HIP]: [0.3, 1.5, 0],
+    });
+    const idx = JOINT_FEATURES.findIndex((j) => j.name === "trunk_rotation");
+    // Same frame for both → no gate.
+    expect(featureConfidence(rawOk)[idx]).toBe(1);
+    // Cleaned geometry degenerate → gate fires even though raw looks fine.
+    expect(featureConfidence(rawOk, cleanedDegenerate)[idx]).toBe(0);
+  });
+
   it("trunk rotation ~ 0 when shoulders parallel to hips", () => {
     const f = mkFrame({
       [L.LEFT_SHOULDER]: [-1, 2, 0],

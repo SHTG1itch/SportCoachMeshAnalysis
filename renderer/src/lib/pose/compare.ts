@@ -625,8 +625,13 @@ export function compare(input: CompareInput): AnalysisReport {
   // counts are preserved by the cleanup steps, so indices line up with the
   // angle sequences. Confidence vectors mirror with the same column swaps as
   // the angle vectors.
-  const proConf = featureConfidenceSequence(rawPro);
-  const userConfRaw = featureConfidenceSequence(rawUser);
+  // Visibility from the RAW frames (gap-filled samples keep their honest low
+  // confidence), but the geometry gates (trunk projection ratios) from the
+  // CLEANED frames the angles are actually computed on — gating value and
+  // confidence on different geometry let a hard-zeroed angle through at full
+  // weight when smoothing moved a ratio across the threshold.
+  const proConf = featureConfidenceSequence(rawPro, proFrames);
+  const userConfRaw = featureConfidenceSequence(rawUser, userFrames);
   const proRep = repairImplausible(computeAnglesSequence(proFrames), proConf);
   const userRep = repairImplausible(computeAnglesSequence(userFrames), userConfRaw);
   const proAngles = proRep.seq;

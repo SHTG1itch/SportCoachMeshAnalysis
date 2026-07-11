@@ -257,6 +257,11 @@ function mirrorOnCanvas(
   if (flipCanvas.height !== h) flipCanvas.height = h;
   const ctx = flipCanvas.getContext("2d");
   if (!ctx) throw new Error("Could not get 2D canvas context for TTA mirroring");
+  // The canvas is reused across frames and drawImage composites source-over:
+  // a source with transparency (e.g. a PNG cutout used as the pro image after
+  // a video run) would blend over the previous frame's pixels — a phantom
+  // second athlete in the mirrored detection.
+  ctx.clearRect(0, 0, w, h);
   ctx.setTransform(-1, 0, 0, 1, w, 0);
   ctx.drawImage(src as CanvasImageSource, 0, 0, w, h);
   ctx.setTransform(1, 0, 0, 1, 0, 0);

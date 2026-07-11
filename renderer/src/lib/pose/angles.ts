@@ -60,7 +60,7 @@ export const FEATURE_LANDMARKS: number[][] = [
  * low visibility. Min (not mean) because a single unreliable endpoint corrupts
  * the whole angle regardless of how visible the other landmarks are.
  */
-export function featureConfidence(frame: PoseFrame): number[] {
+export function featureConfidence(frame: PoseFrame, geometryFrame: PoseFrame = frame): number[] {
   const out = FEATURE_LANDMARKS.map((lms) => {
     let c = 1;
     for (const i of lms) {
@@ -72,14 +72,28 @@ export function featureConfidence(frame: PoseFrame): number[] {
   // trunk_rotation is measured on horizontal projections; when the projection
   // collapses the angle is noise, so its confidence must collapse with it (the
   // zeroed value in computeAngles must never read as a trustworthy 0°).
-  if (trunkRotationProjectionRatio(frame) < TRUNK_ROT_MIN_PROJ) {
+  // The geometry gates are evaluated on `geometryFrame` — the same (cleaned)
+  // frame the angles are computed from. Visibility comes from `frame` (raw),
+  // but gating the RATIO on raw geometry opened a crack: smoothing can drag a
+  // borderline ratio below the threshold, so the cleaned angle is hard-zeroed
+  // while the raw-frame gate keeps its confidence at full weight — a
+  // "trustworthy 0°" fed straight into the alignment and the deltas.
+  if (trunkRotationProjectionRatio(geometryFrame) < TRUNK_ROT_MIN_PROJ) {
     out[TRUNK_ROTATION_INDEX] = 0;
+  }
+  // trunk_lean's sign comes from the hip line's horizontal component; when the
+  // hips are pitched near-vertical that component is detector-noise residue and
+  // the sign of a large lean flips with it (see computeAngles).
+  if (trunkLeanHipProjectionRatio(geometryFrame) < TRUNK_ROT_MIN_PROJ) {
+    out[TRUNK_LEAN_INDEX] = 0;
   }
   return out;
 }
 
 /** Index of trunk_rotation in JOINT_FEATURES order. */
 const TRUNK_ROTATION_INDEX = 10;
+/** Index of trunk_lean in JOINT_FEATURES order. */
+const TRUNK_LEAN_INDEX = 11;
 
 /**
  * trunk_rotation projects the shoulder and hip lines onto the horizontal plane.
@@ -109,14 +123,31 @@ export function trunkRotationProjectionRatio(frame: PoseFrame): number {
   return ratio;
 }
 
+/** Fraction (0..1) of the hip line that survives the horizontal projection.
+ * trunk_lean's SIGN is dot(torso_horizontal, up × hipLine); with the hip line
+ * near-vertical (rolled/inverted poses) that cross product is a noise-scale
+ * vector while the lean magnitude stays large, so the sign of a ±90° lean can
+ * flip on centimetre-scale jitter at full landmark visibility. Below the
+ * threshold the value is zeroed and its confidence collapsed, exactly like the
+ * trunk_rotation gate. */
+export function trunkLeanHipProjectionRatio(frame: PoseFrame): number {
+  const v = sub(asVec(frame[L.RIGHT_HIP]), asVec(frame[L.LEFT_HIP]));
+  const full = Math.hypot(v.x, v.y, v.z);
+  if (full === 0) return 0;
+  return Math.hypot(v.x, v.z) / full;
+}
+
 /**
  * Per-frame, per-feature confidence for a whole clip. Callers should pass the
  * RAW extracted frames (before gap-filling), so frames whose landmarks were
  * interpolated — synthetic positions — keep their honest low visibility instead
  * of inheriting the interpolated one.
  */
-export function featureConfidenceSequence(frames: PoseFrame[]): number[][] {
-  return frames.map(featureConfidence);
+export function featureConfidenceSequence(
+  frames: PoseFrame[],
+  geometryFrames?: PoseFrame[],
+): number[][] {
+  return frames.map((f, i) => featureConfidence(f, geometryFrames?.[i] ?? f));
 }
 
 /**
@@ -245,9 +276,18 @@ export function computeAngles(frame: PoseFrame, upSign: number = 1): number[] {
   // east: east = north × up ⇒ front = up × right). Sagittal sign = which side
   // of vertical the torso's horizontal component falls on. A lateral-only lean
   // has ~0 sagittal component; its sign is then irrelevant (magnitude ~0 dot).
+  // Near-vertical hip line → `front` collapses to noise and the sign flips on
+  // jitter while the magnitude stays large: report 0 and let featureConfidence
+  // drop the feature to unmeasured (mirrors the trunk_rotation gate above).
   const front = cross(vertical, hipLine);
   const horiz = sub(torsoAxis, scale(vertical, dot(torsoAxis, vertical)));
-  out.push(dot(horiz, front) >= 0 ? leanMag : -leanMag);
+  out.push(
+    trunkLeanHipProjectionRatio(frame) < TRUNK_ROT_MIN_PROJ
+      ? 0
+      : dot(horiz, front) >= 0
+        ? leanMag
+        : -leanMag,
+  );
 
   // Shoulder line tilt: angle between shoulder line and horizontal.
   // 0 = perfectly level, 90 = vertical.
