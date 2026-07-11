@@ -57,7 +57,7 @@ export function Sidebar() {
               onClick={() => go({ name: n.routeName } as Route)}
               aria-current={active ? "page" : undefined}
               className={clsx(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                "focus-ring w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
                 active
                   ? "bg-accent-500/10 text-accent-400 border border-accent-500/20"
                   : "text-ink-300 hover:text-ink-50 hover:bg-white/5 border border-transparent",

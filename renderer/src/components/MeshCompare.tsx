@@ -90,7 +90,7 @@ export function MeshCompare({ mesh }: { mesh: MeshComparison }) {
             <button
               type="button"
               onClick={() => setIdx(clamp(mesh.keyIndex))}
-              className="text-ink-400 hover:text-accent-400"
+              className="focus-ring rounded text-ink-400 hover:text-accent-400"
             >
               Jump to contact
             </button>

@@ -181,7 +181,7 @@ export function Home() {
                   </div>
                   <button
                     onClick={() => go({ name: "workouts" })}
-                    className="text-xs text-accent-400 hover:text-accent-300"
+                    className="focus-ring rounded text-xs text-accent-400 hover:text-accent-300"
                   >
                     Open
                   </button>
