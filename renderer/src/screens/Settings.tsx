@@ -7,6 +7,7 @@ import { APP_VERSION } from "../version";
 export function Settings() {
   const settings = useStore((s) => s.settings);
   const refreshSettings = useStore((s) => s.refreshSettings);
+  const settingsError = useStore((s) => s.settingsError);
 
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [saved, setSaved] = useState(false);
@@ -52,6 +53,12 @@ export function Settings() {
           are never uploaded.
         </p>
       </div>
+
+      {settingsError && (
+        <div className="error-card" role="alert">
+          Could not load settings: {settingsError}
+        </div>
+      )}
 
       <div className="card p-6 space-y-4">
         <div className="flex items-start gap-3">

@@ -16,6 +16,7 @@ export function Home() {
   const analyses = useStore((s) => s.analyses);
   const workouts = useStore((s) => s.workouts);
   const loaded = useStore((s) => s.loaded);
+  const error = useStore((s) => s.error);
 
   return (
     <div className="space-y-9">
@@ -65,6 +66,12 @@ export function Home() {
           </div>
         </div>
       </section>
+
+      {error && (
+        <div className="error-card" role="alert">
+          Could not load all saved data: {error}
+        </div>
+      )}
 
       <section>
         <div className="flex items-center justify-between mb-4">

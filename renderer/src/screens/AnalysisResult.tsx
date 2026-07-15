@@ -40,6 +40,9 @@ export function AnalysisResult({
   const [regenError, setRegenError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [workoutError, setWorkoutError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [isUnsaved, setIsUnsaved] = useState(unsaved);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const onTabKeyDown = (e: React.KeyboardEvent, idx: number) => {
@@ -56,7 +59,10 @@ export function AnalysisResult({
 
   const { report } = current;
 
-  useEffect(() => setCurrent(record), [record]);
+  useEffect(() => {
+    setCurrent(record);
+    setIsUnsaved(unsaved);
+  }, [record, unsaved]);
 
   // "Saved" badge: a workout is saved only if THIS analysis saved it. Workout
   // ids are deterministic per sport/shot, so matching on workout.id alone
@@ -91,6 +97,7 @@ export function AnalysisResult({
       };
       await window.app.saveAnalysis(updated);
       setCurrent(updated);
+      setIsUnsaved(false);
       // Sync the store's cached list too — Home/History navigate with records
       // from it, so without this the regenerated guide vanished when the same
       // record was reopened (until an app restart).
@@ -127,13 +134,20 @@ export function AnalysisResult({
   };
 
   const onDelete = async () => {
+    setDeleteError(null);
+    setDeleting(true);
     try {
       await window.app.deleteAnalysis(current.id);
       await refresh();
       go({ name: "history" });
     } catch (e) {
       console.error("Failed to delete analysis:", e);
+      setDeleteError(
+        e instanceof Error ? `Couldn't delete analysis: ${e.message}` : "Couldn't delete analysis.",
+      );
       setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -161,8 +175,12 @@ export function AnalysisResult({
           </button>
           {confirmDelete ? (
             <>
-              <button onClick={onDelete} className="btn-subtle text-bad hover:text-bad">
-                <Trash2 size={14} /> Confirm delete
+              <button
+                onClick={onDelete}
+                disabled={deleting}
+                className="btn-subtle text-bad hover:text-bad"
+              >
+                <Trash2 size={14} /> {deleting ? "Deleting…" : "Confirm delete"}
               </button>
               <button onClick={() => setConfirmDelete(false)} className="btn-subtle">
                 Cancel
@@ -179,7 +197,11 @@ export function AnalysisResult({
         </div>
       </div>
 
-      {unsaved && (
+      {deleteError && (
+        <div className="error-card" role="alert">{deleteError}</div>
+      )}
+
+      {isUnsaved && (
         <div className="error-card" role="alert">
           This analysis could not be saved to your history (a storage error
           occurred). The results below are complete, but they will be lost when
@@ -393,4 +415,3 @@ export function AnalysisResult({
     </div>
   );
 }
-

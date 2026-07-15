@@ -13,14 +13,22 @@ export function History() {
   // a single mis-click permanently destroying an analysis that took minutes to
   // compute and needs the original clips to reproduce.
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const del = async (id: string) => {
+    setDeleteError(null);
+    setDeletingId(id);
     try {
       await window.app.deleteAnalysis(id);
       await refresh();
     } catch (e) {
       console.error("Failed to delete analysis:", e);
+      setDeleteError(
+        e instanceof Error ? `Couldn't delete analysis: ${e.message}` : "Couldn't delete analysis.",
+      );
     } finally {
+      setDeletingId(null);
       setConfirmId(null);
     }
   };
@@ -34,6 +42,9 @@ export function History() {
 
       {error && (
         <div className="error-card" role="alert">{error}</div>
+      )}
+      {deleteError && (
+        <div className="error-card" role="alert">{deleteError}</div>
       )}
 
       {!loaded ? (
@@ -82,9 +93,10 @@ export function History() {
                     <span className="text-xs text-bad">Delete?</span>
                     <button
                       onClick={() => del(a.id)}
+                      disabled={deletingId === a.id}
                       className="text-xs font-medium text-bad hover:underline rounded focus-ring"
                     >
-                      Confirm
+                      {deletingId === a.id ? "Deleting…" : "Confirm"}
                     </button>
                     <button
                       onClick={() => setConfirmId(null)}
