@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Desktop app that compares your athletic technique to a professional's using 3D pose estimation.",
+  "author": "Srivats Iyer",
   "main": "dist-electron/electron/main.js",
   "type": "module",
   "scripts": {
