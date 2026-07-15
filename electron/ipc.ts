@@ -16,8 +16,13 @@ import type {
   AnalysisRecord,
   AppSettings,
   SavedWorkout,
-  SportId,
 } from "../shared/types";
+import {
+  isAnalysisReport,
+  isSportId,
+  isTheme,
+  isWorkout,
+} from "../shared/validation";
 
 // ---------------------------------------------------------------------------
 // IPC input validation.
@@ -34,12 +39,6 @@ const MAX_SHOT = 256;
 const MAX_THUMB = 4 * 1024 * 1024; // a pose thumbnail data URL
 const MAX_PAYLOAD = 12 * 1024 * 1024; // a full AnalysisReport / Workout, JSON
 
-const SPORT_IDS: ReadonlySet<string> = new Set<SportId>([
-  "tennis", "basketball", "golf", "baseball", "soccer", "boxing",
-  "volleyball", "swimming", "custom",
-]);
-const THEMES: ReadonlySet<string> = new Set(["dark", "light"]);
-
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -52,7 +51,7 @@ function str(v: unknown, max: number, field: string): string {
 
 /** Reject anything whose JSON serialization exceeds `max` bytes. */
 function boundedJson(v: unknown, max: number, field: string): void {
-  if (JSON.stringify(v).length > max) {
+  if (Buffer.byteLength(JSON.stringify(v), "utf8") > max) {
     throw new Error(`IPC payload too large: ${field}`);
   }
 }
@@ -61,14 +60,17 @@ function validateAnalysis(r: unknown): AnalysisRecord {
   if (!isObj(r)) throw new Error("Invalid IPC payload: analysis record");
   str(r.id, MAX_ID, "id");
   str(r.createdAt, MAX_ID, "createdAt");
-  if (!SPORT_IDS.has(r.sportId as string)) throw new Error("Invalid IPC payload: sportId");
+  if (!isSportId(r.sportId)) throw new Error("Invalid IPC payload: sportId");
   str(r.shot, MAX_SHOT, "shot");
   if (r.thumbnailDataUrl !== undefined) {
     if (typeof r.thumbnailDataUrl !== "string" || r.thumbnailDataUrl.length > MAX_THUMB) {
       throw new Error("Invalid IPC payload: thumbnailDataUrl");
     }
   }
-  if (!isObj(r.report)) throw new Error("Invalid IPC payload: report");
+  if (!isAnalysisReport(r.report)) throw new Error("Invalid IPC payload: report");
+  if (r.report.sport.id !== r.sportId || r.report.shot !== r.shot) {
+    throw new Error("Invalid IPC payload: inconsistent analysis metadata");
+  }
   boundedJson(r.report, MAX_PAYLOAD, "report");
   return r as unknown as AnalysisRecord;
 }
@@ -77,26 +79,24 @@ function validateWorkout(w: unknown): SavedWorkout {
   if (!isObj(w)) throw new Error("Invalid IPC payload: workout record");
   str(w.id, MAX_ID, "id");
   str(w.savedAt, MAX_ID, "savedAt");
-  if (w.analysisId !== undefined && typeof w.analysisId !== "string") {
-    throw new Error("Invalid IPC payload: analysisId");
-  }
+  if (w.analysisId !== undefined) str(w.analysisId, MAX_ID, "analysisId");
   if (!Array.isArray(w.tags) || w.tags.some((t) => typeof t !== "string")) {
     throw new Error("Invalid IPC payload: tags");
   }
   // Bound the tag array like every other persisted payload — string-typed but
   // unbounded tags were the one disk-fill vector this module didn't cap.
   boundedJson(w.tags, 16 * 1024, "tags");
-  if (!isObj(w.workout)) throw new Error("Invalid IPC payload: workout");
+  if (!isWorkout(w.workout)) throw new Error("Invalid IPC payload: workout");
   boundedJson(w.workout, MAX_PAYLOAD, "workout");
   return w as unknown as SavedWorkout;
 }
 
 function validateSettings(s: unknown): Partial<AppSettings> {
   if (!isObj(s)) throw new Error("Invalid IPC payload: settings");
-  if (s.theme !== undefined && !THEMES.has(s.theme as string)) {
+  if (s.theme !== undefined && !isTheme(s.theme)) {
     throw new Error("Invalid IPC payload: theme");
   }
-  return s.theme !== undefined ? { theme: s.theme as AppSettings["theme"] } : {};
+  return s.theme !== undefined ? { theme: s.theme } : {};
 }
 
 export function registerIpcHandlers(): void {
