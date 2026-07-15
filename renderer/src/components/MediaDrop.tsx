@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { Upload, Film, Image as ImageIcon, X } from "lucide-react";
+import { inferMediaKind } from "../lib/media";
 
 interface Props {
   label: string;
@@ -17,11 +18,11 @@ function acceptString(accept: Props["accept"]): string {
 }
 
 function matchesAccept(file: File, accept: Props["accept"]): boolean {
-  const t = file.type;
-  if (!t) return true; // unknown MIME (some OS drag sources) — let loading decide
-  if (accept === "image") return t.startsWith("image/");
-  if (accept === "video") return t.startsWith("video/");
-  return t.startsWith("image/") || t.startsWith("video/");
+  const kind = inferMediaKind(file);
+  if (!kind) return true; // genuinely unknown — let Chromium loading decide
+  if (accept === "image") return kind === "image";
+  if (accept === "video") return kind === "video";
+  return true;
 }
 
 function rejectMessage(accept: Props["accept"]): string {
@@ -65,8 +66,9 @@ export function MediaDrop({ label, accept, file, onChange, hint }: Props) {
     [handleFile],
   );
 
-  const isImage = file && file.type.startsWith("image/");
-  const isVideo = file && file.type.startsWith("video/");
+  const kind = file ? inferMediaKind(file) : null;
+  const isImage = kind === "image";
+  const isVideo = kind === "video";
 
   return (
     <div className="flex-1">

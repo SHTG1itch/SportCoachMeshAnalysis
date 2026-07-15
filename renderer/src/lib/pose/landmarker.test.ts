@@ -3,7 +3,14 @@ import type { PoseLandmarkerResult } from "@mediapipe/tasks-vision";
 import { __testing } from "./landmarker";
 import { L, type PoseFrame } from "./types";
 
-const { mergeTta, toFrame, unmirrorFrame, TTA_AGREE_M } = __testing;
+const {
+  fitDetectionSize,
+  mergeTta,
+  toFrame,
+  unmirrorFrame,
+  MAX_DETECTION_EDGE,
+  TTA_AGREE_M,
+} = __testing;
 
 function frame(): PoseFrame {
   const f: PoseFrame = [];
@@ -58,6 +65,22 @@ describe("toFrame", () => {
   it("rejects incomplete world-landmark output", () => {
     const short = frame().slice(0, 32);
     expect(toFrame(resultFrame(short))).toBeNull();
+  });
+});
+
+describe("fitDetectionSize", () => {
+  it("caps landscape and portrait sources while preserving aspect ratio", () => {
+    expect(fitDetectionSize(3840, 2160)).toEqual({ width: 1280, height: 720 });
+    expect(fitDetectionSize(2160, 3840)).toEqual({ width: 720, height: 1280 });
+  });
+
+  it("does not upscale already-small sources", () => {
+    expect(fitDetectionSize(640, 480)).toEqual({ width: 640, height: 480 });
+    expect(MAX_DETECTION_EDGE).toBe(1280);
+  });
+
+  it("rejects invalid dimensions", () => {
+    expect(() => fitDetectionSize(0, 1080)).toThrow(/positive/);
   });
 });
 
