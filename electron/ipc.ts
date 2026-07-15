@@ -1,5 +1,7 @@
-import { ipcMain, BrowserWindow } from "electron";
+import { app, ipcMain, BrowserWindow } from "electron";
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron";
+import * as path from "path";
+import { pathToFileURL } from "url";
 import {
   deleteAnalysis,
   deleteWorkout,
@@ -23,6 +25,7 @@ import {
   isTheme,
   isWorkout,
 } from "../shared/validation";
+import { isTrustedRendererUrl } from "../shared/security";
 
 // ---------------------------------------------------------------------------
 // IPC input validation.
@@ -38,6 +41,10 @@ const MAX_ID = 256;
 const MAX_SHOT = 256;
 const MAX_THUMB = 4 * 1024 * 1024; // a pose thumbnail data URL
 const MAX_PAYLOAD = 12 * 1024 * 1024; // a full AnalysisReport / Workout, JSON
+const PACKAGED_ENTRY_URL = pathToFileURL(
+  path.join(__dirname, "..", "..", "dist", "index.html"),
+).href;
+const DEVELOPMENT_ORIGIN = "http://localhost:5173";
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -99,20 +106,64 @@ function validateSettings(s: unknown): Partial<AppSettings> {
   return s.theme !== undefined ? { theme: s.theme } : {};
 }
 
+function isTrustedIpcSender(e: IpcMainEvent | IpcMainInvokeEvent): boolean {
+  const frameUrl = e.senderFrame?.url;
+  return (
+    typeof frameUrl === "string" &&
+    isTrustedRendererUrl(frameUrl, {
+      isPackaged: app.isPackaged,
+      packagedEntryUrl: PACKAGED_ENTRY_URL,
+      developmentOrigin: DEVELOPMENT_ORIGIN,
+    })
+  );
+}
+
+function assertTrustedIpcSender(e: IpcMainInvokeEvent): void {
+  if (!isTrustedIpcSender(e)) throw new Error("Rejected IPC from an untrusted frame");
+}
+
 export function registerIpcHandlers(): void {
-  ipcMain.handle("analysis:save", (_e, r: unknown) => saveAnalysis(validateAnalysis(r)));
-  ipcMain.handle("analysis:list", () => listAnalyses());
-  ipcMain.handle("analysis:get", (_e, id: unknown) => getAnalysis(str(id, MAX_ID, "id")));
-  ipcMain.handle("analysis:delete", (_e, id: unknown) => deleteAnalysis(str(id, MAX_ID, "id")));
+  ipcMain.handle("analysis:save", (e, r: unknown) => {
+    assertTrustedIpcSender(e);
+    return saveAnalysis(validateAnalysis(r));
+  });
+  ipcMain.handle("analysis:list", (e) => {
+    assertTrustedIpcSender(e);
+    return listAnalyses();
+  });
+  ipcMain.handle("analysis:get", (e, id: unknown) => {
+    assertTrustedIpcSender(e);
+    return getAnalysis(str(id, MAX_ID, "id"));
+  });
+  ipcMain.handle("analysis:delete", (e, id: unknown) => {
+    assertTrustedIpcSender(e);
+    return deleteAnalysis(str(id, MAX_ID, "id"));
+  });
 
-  ipcMain.handle("workout:save", (_e, w: unknown) => saveWorkout(validateWorkout(w)));
-  ipcMain.handle("workout:list", () => listWorkouts());
-  ipcMain.handle("workout:delete", (_e, id: unknown) => deleteWorkout(str(id, MAX_ID, "id")));
+  ipcMain.handle("workout:save", (e, w: unknown) => {
+    assertTrustedIpcSender(e);
+    return saveWorkout(validateWorkout(w));
+  });
+  ipcMain.handle("workout:list", (e) => {
+    assertTrustedIpcSender(e);
+    return listWorkouts();
+  });
+  ipcMain.handle("workout:delete", (e, id: unknown) => {
+    assertTrustedIpcSender(e);
+    return deleteWorkout(str(id, MAX_ID, "id"));
+  });
 
-  ipcMain.handle("settings:get", () => getSettings());
-  ipcMain.handle("settings:set", (_e, s: unknown) => setSettings(validateSettings(s)));
+  ipcMain.handle("settings:get", (e) => {
+    assertTrustedIpcSender(e);
+    return getSettings();
+  });
+  ipcMain.handle("settings:set", (e, s: unknown) => {
+    assertTrustedIpcSender(e);
+    return setSettings(validateSettings(s));
+  });
 
-  ipcMain.handle("shell:open", async (_e, url: unknown) => {
+  ipcMain.handle("shell:open", async (e, url: unknown) => {
+    assertTrustedIpcSender(e);
     if (typeof url !== "string") throw new Error("Invalid IPC payload: url");
     await openExternalSafely(url);
   });
@@ -124,13 +175,21 @@ export function registerIpcHandlers(): void {
   const senderWindow = (e: IpcMainEvent | IpcMainInvokeEvent): BrowserWindow | null =>
     BrowserWindow.fromWebContents(e.sender);
 
-  ipcMain.on("window:minimize", (e) => senderWindow(e)?.minimize());
+  ipcMain.on("window:minimize", (e) => {
+    if (isTrustedIpcSender(e)) senderWindow(e)?.minimize();
+  });
   ipcMain.on("window:toggle-maximize", (e) => {
+    if (!isTrustedIpcSender(e)) return;
     const w = senderWindow(e);
     if (!w) return;
     if (w.isMaximized()) w.unmaximize();
     else w.maximize();
   });
-  ipcMain.on("window:close", (e) => senderWindow(e)?.close());
-  ipcMain.handle("window:is-maximized", (e) => senderWindow(e)?.isMaximized() ?? false);
+  ipcMain.on("window:close", (e) => {
+    if (isTrustedIpcSender(e)) senderWindow(e)?.close();
+  });
+  ipcMain.handle("window:is-maximized", (e) => {
+    assertTrustedIpcSender(e);
+    return senderWindow(e)?.isMaximized() ?? false;
+  });
 }

@@ -5,6 +5,7 @@ import { pathToFileURL } from "url";
 import { registerIpcHandlers } from "./ipc";
 import { initDb, closeDb } from "./db";
 import { openExternalSafely } from "./safeOpen";
+import { isTrustedRendererUrl } from "../shared/security";
 
 const isDev = process.env.NODE_ENV === "development";
 const isMac = process.platform === "darwin";
@@ -96,6 +97,11 @@ function createWindow(): void {
       // contextBridge + ipcRenderer.invoke, both of which work sandboxed, so a
       // compromised renderer is contained by process isolation.
       sandbox: true,
+      devTools: isDev,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      webviewTag: false,
+      navigateOnDragDrop: false,
     },
   });
 
@@ -130,9 +136,11 @@ function createWindow(): void {
     path.join(__dirname, "..", "..", "dist", "index.html"),
   ).href;
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    const allowed = isDev
-      ? url.startsWith("http://localhost:5173")
-      : url === appIndexUrl;
+    const allowed = isTrustedRendererUrl(url, {
+      isPackaged: !isDev,
+      packagedEntryUrl: appIndexUrl,
+      developmentOrigin: "http://localhost:5173",
+    });
     if (!allowed) {
       event.preventDefault();
       void openExternalSafely(url);
@@ -212,6 +220,14 @@ app.whenReady().then(() => {
       });
     });
   }
+
+  // This app does not use camera, microphone, geolocation, notifications, MIDI,
+  // screen capture, or any other Chromium permission. Electron otherwise grants
+  // permission requests by default, so deny both requests and permission checks.
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => callback(false),
+  );
+  session.defaultSession.setPermissionCheckHandler(() => false);
 
   createWindow();
 
