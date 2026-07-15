@@ -39,6 +39,7 @@ interface State {
   /** Set when a data load fails, so the UI can surface it instead of silently
    * showing empty lists. */
   error: string | null;
+  settingsError: string | null;
 
   go(route: Route): void;
   refresh(): Promise<void>;
@@ -52,6 +53,7 @@ export const useStore = create<State>((set) => ({
   settings: null,
   loaded: false,
   error: null,
+  settingsError: null,
 
   go: (route) => set({ route }),
 
@@ -77,9 +79,13 @@ export const useStore = create<State>((set) => ({
   refreshSettings: async () => {
     try {
       const settings = await window.app.getSettings();
-      set({ settings });
+      set({ settings, settingsError: null });
     } catch (e) {
       console.error("Failed to load settings:", e);
+      set({
+        settingsError:
+          e instanceof Error ? e.message : "Could not load your settings.",
+      });
     }
   },
 }));

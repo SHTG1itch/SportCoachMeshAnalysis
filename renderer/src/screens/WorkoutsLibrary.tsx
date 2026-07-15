@@ -7,7 +7,9 @@ export function WorkoutsLibrary() {
   const workouts = useStore((s) => s.workouts);
   const refresh = useStore((s) => s.refresh);
   const loaded = useStore((s) => s.loaded);
+  const error = useStore((s) => s.error);
   const [query, setQuery] = useState("");
+  const [mutationError, setMutationError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -22,11 +24,15 @@ export function WorkoutsLibrary() {
   }, [workouts, query]);
 
   const del = async (id: string) => {
+    setMutationError(null);
     try {
       await window.app.deleteWorkout(id);
       await refresh();
     } catch (e) {
       console.error("Failed to delete workout:", e);
+      setMutationError(
+        e instanceof Error ? `Couldn't remove workout: ${e.message}` : "Couldn't remove workout.",
+      );
     }
   };
 
@@ -38,6 +44,12 @@ export function WorkoutsLibrary() {
           Training sessions saved from your analyses. Open any to see the full set.
         </p>
       </div>
+
+      {(error || mutationError) && (
+        <div className="error-card" role="alert">
+          {mutationError ?? `Could not load all saved workouts: ${error}`}
+        </div>
+      )}
 
       <div className="card flex items-center gap-2 px-3 py-2 focus-within:ring-2 focus-within:ring-accent-500/30">
         <Search size={16} className="text-ink-400 shrink-0" />
