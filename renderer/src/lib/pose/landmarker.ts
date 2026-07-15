@@ -206,6 +206,26 @@ const TTA_AGREE_M = 0.15;
  */
 const TTA_DISAGREE_VIS_CAP = 0.25;
 
+/** PoseLandmarker internally resizes to its model input. Capping the source
+ * before inference avoids allocating two enormous RGBA canvases for 4K/8K
+ * footage (primary + mirrored TTA) with no useful accuracy gain. */
+const MAX_DETECTION_EDGE = 1280;
+
+function fitDetectionSize(
+  width: number,
+  height: number,
+  maxEdge = MAX_DETECTION_EDGE,
+): { width: number; height: number } {
+  if (!(width > 0) || !(height > 0) || !(maxEdge > 0)) {
+    throw new Error("Detection source dimensions must be positive");
+  }
+  const scale = Math.min(1, maxEdge / Math.max(width, height));
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
 /** Map a detection of the mirrored image back into original-image space:
  * negate x and swap each left landmark with its right partner. */
 function unmirrorFrame(f: PoseFrame): PoseFrame {
@@ -247,6 +267,31 @@ function mergeTta(primary: PoseFrame, flipped: PoseFrame): PoseFrame {
 
 /** Lazily-created canvas that holds the horizontally mirrored source frame. */
 let flipCanvas: HTMLCanvasElement | null = null;
+let detectionCanvas: HTMLCanvasElement | null = null;
+
+function scaledDetectionSource(
+  src: HTMLImageElement | HTMLCanvasElement | ImageBitmap,
+  sourceWidth: number,
+  sourceHeight: number,
+): {
+  source: HTMLImageElement | HTMLCanvasElement | ImageBitmap;
+  width: number;
+  height: number;
+} {
+  const fitted = fitDetectionSize(sourceWidth, sourceHeight);
+  if (fitted.width === sourceWidth && fitted.height === sourceHeight) {
+    return { source: src, ...fitted };
+  }
+  if (!detectionCanvas) detectionCanvas = document.createElement("canvas");
+  detectionCanvas.width = fitted.width;
+  detectionCanvas.height = fitted.height;
+  const ctx = detectionCanvas.getContext("2d");
+  if (!ctx) throw new Error("Could not get 2D canvas context for image scaling");
+  ctx.clearRect(0, 0, fitted.width, fitted.height);
+  ctx.drawImage(src as CanvasImageSource, 0, 0, fitted.width, fitted.height);
+  return { source: detectionCanvas, ...fitted };
+}
+
 function mirrorOnCanvas(
   src: HTMLImageElement | HTMLCanvasElement | ImageBitmap | HTMLVideoElement,
   w: number,
@@ -280,13 +325,21 @@ export async function detectImage(
   opts: DetectOptions = {},
 ): Promise<PoseFrame | null> {
   const lm = await getLandmarker("IMAGE");
-  const res = lm.detect(image as unknown as HTMLImageElement);
+  const imageElement = image as HTMLImageElement;
+  const sourceWidth = imageElement.naturalWidth || image.width;
+  const sourceHeight = imageElement.naturalHeight || image.height;
+  if (!(sourceWidth > 0) || !(sourceHeight > 0)) return null;
+  const prepared = scaledDetectionSource(image, sourceWidth, sourceHeight);
+  const res = lm.detect(prepared.source as unknown as HTMLImageElement);
   const primary = toFrame(res);
   if (opts.tta === false) return primary;
-  const w = (image as { width: number }).width;
-  const h = (image as { height: number }).height;
-  if (!(w > 0) || !(h > 0)) return primary;
-  const resF = lm.detect(mirrorOnCanvas(image, w, h) as unknown as HTMLImageElement);
+  const resF = lm.detect(
+    mirrorOnCanvas(
+      prepared.source,
+      prepared.width,
+      prepared.height,
+    ) as unknown as HTMLImageElement,
+  );
   const flipped = toFrame(resF);
   if (!flipped) return primary;
   const unmirrored = unmirrorFrame(flipped);
@@ -336,8 +389,9 @@ export async function extractVideo(
     );
   }
   const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  const fitted = fitDetectionSize(video.videoWidth, video.videoHeight);
+  canvas.width = fitted.width;
+  canvas.height = fitted.height;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) throw new Error("Could not get 2D canvas context for frame extraction");
 
@@ -395,6 +449,8 @@ export const __testing = {
   mergeTta,
   unmirrorFrame,
   mirrorOnCanvas,
+  fitDetectionSize,
+  MAX_DETECTION_EDGE,
   TTA_AGREE_M,
 };
 

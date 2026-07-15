@@ -6,6 +6,7 @@ import { MediaDrop } from "../components/MediaDrop";
 import { runAnalysis, buildRecord, type AnalyzeProgress } from "../lib/analyze";
 import { poseToDataUrl } from "../lib/pose/render";
 import { useStore } from "../store";
+import { inferMediaKind } from "../lib/media";
 import type { AnalysisReport, SportMeta } from "@shared/types";
 import type { PoseFrame } from "../lib/pose/types";
 
@@ -86,10 +87,12 @@ export function NewAnalysis() {
     setError(null);
     setProgress({ stage: "loading_pro", message: "Starting…", progress: 0 });
     try {
-      const proKind = proFile.type.startsWith("image/") ? "image" : "video";
+      const proKind = inferMediaKind(proFile) === "image" ? "image" : "video";
       const report = await runAnalysis(
         { sport, shot, proFile, userFile, proKind, signal: controller.signal },
-        setProgress,
+        (next) => {
+          if (mountedRef.current) setProgress(next);
+        },
       );
       const record = buildRecord(report, userKeyThumbnail(report));
       // A persistence failure must not discard a completed multi-minute
