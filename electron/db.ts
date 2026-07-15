@@ -8,33 +8,25 @@ import type {
   AppSettings,
   SavedWorkout,
 } from "../shared/types";
+import {
+  isAnalysisReport,
+  isSportId,
+  isStringArray,
+  isTheme,
+  isWorkout,
+} from "../shared/validation";
 
 /**
- * Minimal structural check on a persisted report. JSON.parse succeeding is not
+ * Full runtime validation of a persisted report. JSON.parse succeeding is not
  * enough: a valid-JSON payload with the wrong shape (record from an
  * incompatible version, manual edit) previously sailed through the per-row
  * guard and crashed Home/History on dereference — white-screening the app on
  * every launch until the DB was deleted, since Home is the default route.
- * Checks only the fields the screens dereference unconditionally.
+ * Every renderer-dereferenced field is checked by the shared schema guard.
  */
-function isValidReport(r: unknown): r is AnalysisReport {
-  if (typeof r !== "object" || r === null) return false;
-  const rep = r as Record<string, unknown>;
-  const sport = rep.sport as Record<string, unknown> | undefined;
-  return (
-    typeof sport === "object" &&
-    sport !== null &&
-    typeof sport.name === "string" &&
-    typeof rep.overallSimilarity === "number" &&
-    Array.isArray(rep.jointDeltas) &&
-    Array.isArray(rep.phases) &&
-    Array.isArray(rep.workouts)
-  );
-}
-
 function parseReport(payload: string): AnalysisReport {
   const report: unknown = JSON.parse(payload);
-  if (!isValidReport(report)) {
+  if (!isAnalysisReport(report)) {
     throw new Error("payload is not a valid AnalysisReport");
   }
   return report;
@@ -149,10 +141,11 @@ export function listAnalyses(): AnalysisRecord[] {
   const out: AnalysisRecord[] = [];
   for (const row of rows) {
     try {
+      if (!isSportId(row.sportId)) throw new Error("invalid sportId");
       out.push({
         id: row.id,
         createdAt: row.createdAt,
-        sportId: row.sportId as AnalysisRecord["sportId"],
+        sportId: row.sportId,
         shot: row.shot,
         thumbnailDataUrl: row.thumbnail ?? undefined,
         report: parseReport(row.payload),
@@ -185,10 +178,11 @@ export function getAnalysis(id: string): AnalysisRecord | null {
   // Same guarded parse as listAnalyses: one corrupt row should read as
   // missing, not reject the IPC call.
   try {
+    if (!isSportId(row.sportId)) throw new Error("invalid sportId");
     return {
       id: row.id,
       createdAt: row.createdAt,
-      sportId: row.sportId as AnalysisRecord["sportId"],
+      sportId: row.sportId,
       shot: row.shot,
       thumbnailDataUrl: row.thumbnail ?? undefined,
       report: parseReport(row.payload),
@@ -239,12 +233,17 @@ export function listWorkouts(): SavedWorkout[] {
   const out: SavedWorkout[] = [];
   for (const row of rows) {
     try {
+      const tags: unknown = JSON.parse(row.tags);
+      const workout: unknown = JSON.parse(row.payload);
+      if (!isStringArray(tags) || !isWorkout(workout)) {
+        throw new Error("payload is not a valid SavedWorkout");
+      }
       out.push({
         id: row.id,
         savedAt: row.savedAt,
         analysisId: row.analysisId ?? undefined,
-        tags: JSON.parse(row.tags),
-        workout: JSON.parse(row.payload),
+        tags,
+        workout,
       });
     } catch (e) {
       console.warn(`Skipping unreadable workout row ${row.id}:`, e);
@@ -272,7 +271,7 @@ export function getSettings(): AppSettings {
   const out: Record<string, string> = {};
   for (const r of rows) out[r.key] = r.value;
   return {
-    theme: (out.theme as AppSettings["theme"]) ?? DEFAULT_SETTINGS.theme,
+    theme: isTheme(out.theme) ? out.theme : DEFAULT_SETTINGS.theme,
   };
 }
 
