@@ -13,9 +13,6 @@ concurrency:
 jobs:
   build-signed-installer:
     runs-on: windows-latest
-    env:
-      WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-      WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -27,6 +24,9 @@ jobs:
 
       - name: Require code-signing credentials
         shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK) -or
               [string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) {
@@ -43,6 +43,9 @@ jobs:
           npm run test:database
 
       - name: Build signed installer
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: npm run dist:signed
 
       - name: Verify Electron fuses
