@@ -42,7 +42,7 @@
     "@emnapi/core": "1.11.2",
     "@emnapi/runtime": "1.11.2",
     "@types/better-sqlite3": "^7.6.11",
-    "@types/node": "^24.13.3",
+    "@types/node": "^26.1.1",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^6.0.3",
