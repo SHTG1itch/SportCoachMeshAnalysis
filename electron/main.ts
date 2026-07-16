@@ -195,7 +195,15 @@ app.whenReady().then(() => {
   // inside whenReady's then() with no catch — the packaged app just sat
   // invisible in Task Manager. Fail loudly and quit instead.
   try {
-    initDb();
+    const { recoveredFrom } = initDb();
+    if (recoveredFrom) {
+      dialog.showMessageBoxSync({
+        type: "warning",
+        title: "Sport Coach repaired local storage",
+        message: "The local database was damaged, so a fresh one was created.",
+        detail: `The original files were preserved for recovery at:\n${recoveredFrom}`,
+      });
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     dialog.showErrorBox(
