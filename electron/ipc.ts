@@ -1,4 +1,4 @@
-import { app, ipcMain, BrowserWindow } from "electron";
+import { ipcMain, BrowserWindow } from "electron";
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import * as path from "path";
 import { pathToFileURL } from "url";
@@ -118,7 +118,10 @@ function isTrustedIpcSender(e: IpcMainEvent | IpcMainInvokeEvent): boolean {
   return (
     typeof frameUrl === "string" &&
     isTrustedRendererUrl(frameUrl, {
-      isPackaged: app.isPackaged,
+      // `npm start` loads the built file:// renderer directly from the source
+      // checkout, so Electron's app.isPackaged remains false. Runtime mode is
+      // defined by NODE_ENV instead: only `npm run dev` trusts the Vite origin.
+      isPackaged: process.env.NODE_ENV !== "development",
       packagedEntryUrl: PACKAGED_ENTRY_URL,
       developmentOrigin: DEVELOPMENT_ORIGIN,
     })

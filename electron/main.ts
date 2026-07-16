@@ -116,6 +116,32 @@ function createWindow(): void {
 
   mainWindow.once("ready-to-show", () => mainWindow?.show());
 
+  // CI exercises the exact source-checkout production path used by `npm start`,
+  // including the preload bridge and IPC sender validation, then exits without
+  // requiring manual window interaction.
+  if (process.argv.includes("--startup-smoke-test")) {
+    mainWindow.webContents.once("did-finish-load", () => {
+      void mainWindow?.webContents
+        .executeJavaScript(`Promise.all([
+          window.app.listAnalyses(),
+          window.app.listWorkouts(),
+          window.app.getSettings()
+        ]).then(([analyses, workouts, settings]) => ({
+          analyses: analyses.length,
+          workouts: workouts.length,
+          theme: settings.theme
+        }))`)
+        .then((result) => {
+          console.log("Terminal startup and IPC verified", result);
+          app.quit();
+        })
+        .catch((error) => {
+          console.error("Terminal startup smoke test failed", error);
+          app.exit(1);
+        });
+    });
+  }
+
   // Keep the renderer's maximize/restore button glyph in sync with the real
   // window state, including OS-driven changes (snap, Win+Up, double-clicking the
   // drag region) that never go through our IPC.

@@ -259,6 +259,7 @@ npm start         # builds and runs Electron directly from this checkout
 npm run dev       # live-reload development mode
 npm run test      # Vitest — 188 active tests plus 6 gated real-footage evaluations
 npm run test:database # native SQLite startup/recovery test under Electron's ABI
+npm run test:startup  # production-mode source launch + preload/IPC smoke test
 npm run typecheck # renderer, test, shared, and Electron TypeScript projects
 ```
 
@@ -314,6 +315,10 @@ and number-driven rather than free-form.
     Electron output is cleaned before every compile, and a real native SQLite
     test proves startup, migration, WAL settings, integrity checking, corrupt
     file preservation, and fresh-store recovery under Electron's ABI.
+  - The production-mode source command launches with the strict CSP, sandboxed
+    renderer, context-isolated preload, working IPC persistence bridge, and a
+    persistent main-process log. CI exercises this same terminal startup path on
+    Windows after verifying native SQLite initialization and recovery.
   - The real analysis engine was validated on actual tennis footage (an amateur
     forehand vs. Novak Djokovic court-level practice, pulled from YouTube) via a
     browser harness that runs the live `compare()` + coaching pipeline on
