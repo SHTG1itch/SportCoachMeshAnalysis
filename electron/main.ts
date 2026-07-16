@@ -6,6 +6,13 @@ import { registerIpcHandlers } from "./ipc";
 import { initDb, closeDb } from "./db";
 import { openExternalSafely } from "./safeOpen";
 import { isTrustedRendererUrl } from "../shared/security";
+import {
+  initializeMainLogger,
+  logError,
+  logInfo,
+  logWarn,
+} from "./logger";
+import { RecentEventCounter } from "./recentEventCounter";
 
 const isDev = process.env.NODE_ENV === "development";
 const isMac = process.platform === "darwin";
@@ -39,6 +46,9 @@ const PROD_CSP = [
 ].join("; ");
 
 let mainWindow: BrowserWindow | null = null;
+const CRASH_WINDOW_MS = 60_000;
+const MAX_AUTOMATIC_RELOADS = 2;
+const rendererCrashCounter = new RecentEventCounter(CRASH_WINDOW_MS);
 
 /**
  * Application menu. macOS always gets a real menu (it lives in the global menu
@@ -149,21 +159,42 @@ function createWindow(): void {
   // A renderer crash (OOM from the pose WASM on a long clip, GPU process kill)
   // must not leave a permanently dead window — prod has no Reload menu item.
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
-    console.error("Renderer process gone:", details.reason, details.exitCode);
+    logError("Renderer process gone:", details.reason, details.exitCode);
     if (details.reason !== "clean-exit" && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.reload();
+      if (rendererCrashCounter.record() <= MAX_AUTOMATIC_RELOADS) {
+        mainWindow.webContents.reload();
+      } else {
+        dialog.showErrorBox(
+          "Sport Coach stopped after repeated crashes",
+          "The analysis window crashed repeatedly and was not reloaded again. Restart the app; details were saved in the app data logs folder.",
+        );
+        mainWindow.destroy();
+        app.quit();
+      }
     }
   });
   mainWindow.webContents.on("unresponsive", () => {
-    console.warn("Renderer unresponsive (long-running pose extraction?)");
+    logWarn("Renderer unresponsive (long-running pose extraction?)");
   });
 
+  let load: Promise<void>;
   if (isDev) {
-    mainWindow.loadURL("http://localhost:5173");
+    load = mainWindow.loadURL("http://localhost:5173");
     mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
-    mainWindow.loadFile(path.join(__dirname, "..", "..", "dist", "index.html"));
+    load = mainWindow.loadFile(
+      path.join(__dirname, "..", "..", "dist", "index.html"),
+    );
   }
+  void load.catch((error) => {
+    logError("Renderer failed to load:", error);
+    dialog.showErrorBox(
+      "Sport Coach could not open",
+      "The application interface failed to load. Restart the app; details were saved in the app data logs folder.",
+    );
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+    app.quit();
+  });
 }
 
 // Two instances sharing one WAL SQLite file means stale in-memory lists and
@@ -183,14 +214,24 @@ if (!gotLock) {
 // Last-resort logging: an unhandled rejection in main otherwise dies silently
 // (in the packaged app there is no console to see it in).
 process.on("uncaughtException", (err) => {
-  console.error("Uncaught exception in main process:", err);
+  logError("Uncaught exception in main process:", err);
+  dialog.showErrorBox(
+    "Sport Coach encountered a fatal error",
+    "The application must close. Details were saved in the app data logs folder.",
+  );
+  app.exit(1);
 });
 process.on("unhandledRejection", (reason) => {
-  console.error("Unhandled rejection in main process:", reason);
+  logError("Unhandled rejection in main process:", reason);
 });
 
 app.whenReady().then(() => {
   if (!gotLock) return; // quitting — the first instance owns the window/DB
+  const logPath = initializeMainLogger(
+    path.join(app.getPath("userData"), "logs"),
+  );
+  logInfo("Starting Sport Coach", app.getVersion(), process.platform, process.arch);
+  logInfo("Log file:", logPath);
   // A corrupt DB / unwritable userData / broken native module otherwise threw
   // inside whenReady's then() with no catch — the packaged app just sat
   // invisible in Task Manager. Fail loudly and quit instead.
