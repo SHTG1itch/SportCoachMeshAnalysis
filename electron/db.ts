@@ -3,6 +3,7 @@ import { app } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import { openDatabaseWithRecovery } from "./databaseCore";
+import { logWarn } from "./logger";
 import type {
   AnalysisRecord,
   AnalysisReport,
@@ -125,7 +126,7 @@ export function listAnalyses(): AnalysisRecord[] {
         report: parseReport(row.payload),
       });
     } catch (e) {
-      console.warn(`Skipping unreadable analysis row ${row.id}:`, e);
+      logWarn(`Skipping unreadable analysis row ${row.id}:`, e);
     }
   }
   return out;
@@ -162,7 +163,7 @@ export function getAnalysis(id: string): AnalysisRecord | null {
       report: parseReport(row.payload),
     };
   } catch (e) {
-    console.warn(`Unreadable analysis row ${row.id}:`, e);
+    logWarn(`Unreadable analysis row ${row.id}:`, e);
     return null;
   }
 }
@@ -220,7 +221,7 @@ export function listWorkouts(): SavedWorkout[] {
         workout,
       });
     } catch (e) {
-      console.warn(`Skipping unreadable workout row ${row.id}:`, e);
+      logWarn(`Skipping unreadable workout row ${row.id}:`, e);
     }
   }
   return out;
