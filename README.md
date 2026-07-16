@@ -1,14 +1,15 @@
 # Sport Coach — Mesh Analysis
 
-Desktop coaching tool. You upload a clip of a professional and a clip of yourself
-performing the same motion. The app runs 3D pose estimation on both, aligns the
+Local coaching program run from a terminal or VS Code. You upload a clip of a
+professional and a clip of yourself performing the same motion. The program runs
+3D pose estimation on both, aligns the
 motions in time, compares every joint frame-by-frame, and produces a coaching
 guide plus saveable workout plans that target the specific differences.
 
 Everything runs on your machine. There is no account, no API key, and nothing
 about your footage is uploaded (see "Network use").
 
-## Using the app
+## Using the program
 
 The interface is a single window with a left navigation rail and six screens.
 
@@ -95,7 +96,7 @@ Theme (dark or light), an explanation of the on-device, no-key privacy model,
 and an About panel (application name, version, pose model, and where data is
 stored). Saving shows a brief, screen-reader-announced confirmation.
 
-## Desktop window and chrome
+## Program window and chrome
 
 The window is frameless with a custom title bar, so its chrome matches the app
 theme on every platform:
@@ -224,7 +225,7 @@ theme on every platform:
 
 ## Stack
 
-- **Electron 43** shell, frameless window with a custom title bar, theme-aware
+- **Electron 43** local runtime, frameless window with a custom title bar, theme-aware
   caption buttons on Windows/Linux, and an auto-hidden application menu. The
   context-isolated, sandboxed preload exposes a single namespaced `window.app`
   bridge (persistence, settings, and window controls).
@@ -243,15 +244,19 @@ theme on every platform:
 
 ```bash
 npm install
-npm run dev
+npm start
 ```
 
-`npm run dev` starts Vite at :5173 and Electron, which loads the Vite URL in dev
-and the built `dist/` in prod.
+`npm start` builds the source and launches the program locally. It does not
+produce or install an executable, so code-signing credentials are not needed.
+VS Code also discovers this command in its **NPM Scripts** view. For active
+development with hot reload, use `npm run dev`; it starts Vite at :5173 and the
+Electron window together.
 
 ```bash
 npm run build     # Vite production bundle + clean Electron TypeScript build
-npm run start     # runs Electron against the built bundle
+npm start         # builds and runs Electron directly from this checkout
+npm run dev       # live-reload development mode
 npm run test      # Vitest — 188 active tests plus 6 gated real-footage evaluations
 npm run test:database # native SQLite startup/recovery test under Electron's ABI
 npm run typecheck # renderer, test, shared, and Electron TypeScript projects
@@ -259,44 +264,27 @@ npm run typecheck # renderer, test, shared, and Electron TypeScript projects
 
 ### Native module note
 
-`better-sqlite3` is a native module. `npm install` runs electron-builder's
-`install-app-deps` automatically so the binary matches Electron's ABI. Use
+`better-sqlite3` is a native module. `npm install` runs the official
+`@electron/rebuild` tool automatically so the binary matches Electron's ABI. Use
 `npm run rebuild` to repeat that step when troubleshooting. The renderer code
 (the entire analysis pipeline) has no native dependencies and runs under Node
 for `npm test`; `npm run test:database` deliberately runs under Electron.
-
-### Package for Windows
-
-```bash
-npm run pack # unpacked application for smoke testing
-npm run dist # NSIS installer in release/
-npm run dist:signed # release build; fails unless a signing identity is available
-```
-
-Packaging verifies hardened Electron fuses in CI. A distributable release must
-also be Authenticode-signed: provide `WIN_CSC_LINK` and
-`WIN_CSC_KEY_PASSWORD` through CI secrets before running the release build.
-Never commit a certificate or password. Local unsigned artifacts are suitable
-for testing only and will show Windows an unknown-publisher warning. The manual
-**Signed Windows release** GitHub Actions workflow runs all tests, builds with
-mandatory signing, independently verifies both Authenticode signatures, checks
-the packaged ASAR and Electron fuses, and uploads the signed installer artifact.
 
 ### No API key, fully free
 
 There is nothing to configure and no key to obtain. The coaching guide and
 workouts are computed on-device by the built-in biomechanics engine at zero
 cost, and your videos, poses, and results are never uploaded — no personal data
-ever leaves the machine. The open-source MediaPipe runtime and pose model ship
-inside the app, so there is no first-run download.
+ever leaves the machine. The MediaPipe runtime and pose model are checked into
+the local source tree, so there is no first-run download.
 
 ### Network use
 
-The app makes **no API calls and uploads nothing** — your videos, extracted
+The program makes **no API calls and uploads nothing** — your videos, extracted
 poses, analyses, and the coaching guide all stay on your machine. The pinned
-MediaPipe WASM runtime and BlazePose model are packaged locally and protected by
-the application's ASAR integrity check. Analysis therefore works without a
-network connection, including on the first run.
+MediaPipe WASM runtime and BlazePose model are loaded from the local source
+checkout. Analysis therefore works without a network connection, including on
+the first run.
 
 The tradeoff is deliberate: the engine is a deterministic rule system keyed by
 joint, direction (signed bias), and magnitude, not a language model. It gains
@@ -326,10 +314,6 @@ and number-driven rather than free-form.
     Electron output is cleaned before every compile, and a real native SQLite
     test proves startup, migration, WAL settings, integrity checking, corrupt
     file preservation, and fresh-store recovery under Electron's ABI.
-  - The Windows directory package launches with the production CSP, sandboxed
-    renderer, ASAR integrity enforcement, nine verified Electron fuses, and a
-    persistent main-process log. The package contains the pinned MediaPipe model
-    and WASM assets and excludes development footage/harness data.
   - The real analysis engine was validated on actual tennis footage (an amateur
     forehand vs. Novak Djokovic court-level practice, pulled from YouTube) via a
     browser harness that runs the live `compare()` + coaching pipeline on
@@ -342,13 +326,11 @@ and number-driven rather than free-form.
     bundled single-frame path was also exercised end-to-end with a real pro
     image and 120 user frames: 113 poses were detected and the comparison,
     guide, and workouts completed without a CDN.
-- **Still requiring manual release validation**:
-  - Interacting with the packaged Electron upload/result UI on representative
+- **Still requiring manual environment validation**:
+  - Interacting with the Electron upload/result UI on representative
     end-user machines and GPU/CPU configurations. Automated boot, unit,
-    inference, and package checks cover the underlying paths but not every
+    inference, and runtime checks cover the underlying paths but not every
     visual interaction.
-  - Authenticode signing and installer reputation require the release owner's
-    code-signing certificate; unsigned local builds are not distributable.
   - Contact-instant-only faults remain a known limitation: per-frame confidence
     weighting now discounts low-visibility contact frames in every per-joint
     statistic (so they can no longer fabricate a fault), but significance still

@@ -39,7 +39,7 @@ jobs:
       - name: Build production bundles
         run: npm run build
 
-  package-windows:
+  runtime-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -58,12 +58,3 @@ jobs:
 
       - name: Test native database recovery
         run: npm run test:database
-
-      - name: Package Windows application
-        run: npx electron-builder --win --dir --publish never
-
-      - name: Verify Electron fuses
-        run: npm run verify:fuses -- "release/win-unpacked/Sport Coach Mesh.exe"
-
-      - name: Verify packaged contents
-        run: npm run verify:package -- "release/win-unpacked/resources/app.asar"
