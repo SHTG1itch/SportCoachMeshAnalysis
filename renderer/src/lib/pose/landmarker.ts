@@ -5,10 +5,8 @@ import {
 } from "@mediapipe/tasks-vision";
 import type { PoseFrame, Landmark3D } from "./types";
 
-const WASM_CDN =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm";
-const MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task";
+const WASM_PATH = "./mediapipe/wasm";
+const MODEL_PATH = "./mediapipe/models/pose_landmarker_heavy.task";
 
 type RunningMode = "IMAGE" | "VIDEO";
 
@@ -47,9 +45,11 @@ async function getLandmarker(
   const existing = landmarkers[key];
   if (existing) return existing;
   const p = (async () => {
-    const fileset = await FilesetResolver.forVisionTasks(WASM_CDN);
+    const wasmRoot = new URL(WASM_PATH, document.baseURI).href.replace(/\/$/, "");
+    const modelUrl = new URL(MODEL_PATH, document.baseURI).href;
+    const fileset = await FilesetResolver.forVisionTasks(wasmRoot);
     const options = (delegate: "GPU" | "CPU") => ({
-      baseOptions: { modelAssetPath: MODEL_URL, delegate },
+      baseOptions: { modelAssetPath: modelUrl, delegate },
       runningMode: mode,
       numPoses: 1,
       minPoseDetectionConfidence: 0.5,

@@ -139,10 +139,9 @@ theme on every platform:
    33 world landmarks in meters. Inference runs locally in the Electron renderer
    via WebAssembly, on the GPU delegate when a usable WebGL context is available
    and automatically falling back to the CPU delegate otherwise (so the pipeline
-   runs everywhere, just slower). The MediaPipe WASM runtime and the pose model
-   are fetched once from public CDNs (jsDelivr and Google storage) on first use
-   and then cached; this is the app's only network access (see "Network use"
-   below).
+   runs everywhere, just slower). The pinned MediaPipe WASM runtime and pose
+   model are bundled with the app, so inference works offline from first launch
+   and no remote executable code is loaded.
 2. **Signal cleanup** — before any geometry: (a) missing/occluded landmarks
    (including all-zero frames from detection dropouts) are repaired by
    per-landmark temporal interpolation so they can't inject phantom "fully
@@ -269,21 +268,16 @@ dependencies and will run under any Node for `npm test`.
 There is nothing to configure and no key to obtain. The coaching guide and
 workouts are computed on-device by the built-in biomechanics engine at zero
 cost, and your videos, poses, and results are never uploaded — no personal data
-ever leaves the machine. The one exception is a first-run download of the
-open-source MediaPipe WASM runtime and pose model from public CDNs; once those
-are cached the analysis runs offline.
+ever leaves the machine. The open-source MediaPipe runtime and pose model ship
+inside the app, so there is no first-run download.
 
 ### Network use
 
 The app makes **no API calls and uploads nothing** — your videos, extracted
-poses, analyses, and the coaching guide all stay on your machine. The only
-network requests are a one-time fetch of the MediaPipe WASM runtime (jsDelivr)
-and the BlazePose model (Google storage), which the browser engine then caches.
-So the **first** analysis needs a connection; subsequent ones run fully offline.
-Bundling those two assets into the app so it is offline even on first launch —
-loading them from a local `file://` path instead of the CDNs — is a planned
-improvement (it also removes a single point of runtime failure). Until then, the
-offline guarantee holds after the initial model download.
+poses, analyses, and the coaching guide all stay on your machine. The pinned
+MediaPipe WASM runtime and BlazePose model are packaged locally and protected by
+the application's ASAR integrity check. Analysis therefore works without a
+network connection, including on the first run.
 
 The tradeoff is deliberate: the engine is a deterministic rule system keyed by
 joint, direction (signed bias), and magnitude, not a language model. It gains

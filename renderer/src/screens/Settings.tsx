@@ -48,9 +48,9 @@ export function Settings() {
         <p className="mt-2 text-ink-300">
           Your videos and analysis stay on this device — pose estimation, comparison, the
           coaching guide, and the workouts are all computed locally and free, with no API
-          key. The only network use is a one-time, cached download of the open-source
-          MediaPipe pose model the first time you run an analysis; your footage and data
-          are never uploaded.
+          key. The open-source MediaPipe runtime and pose model are bundled with the app,
+          so analysis works offline from the first run and your footage and data are never
+          uploaded.
         </p>
       </div>
 
