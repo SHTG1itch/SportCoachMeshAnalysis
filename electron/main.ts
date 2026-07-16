@@ -16,10 +16,9 @@ const isMac = process.platform === "darwin";
  * Applied in production only — the dev server (Vite HMR) needs inline/eval and a
  * websocket the strict policy would block, and dev already loads from a trusted
  * localhost origin. The directives are scoped to exactly what the app needs:
- *   - script-src: the bundle ('self') + 'wasm-unsafe-eval' for the MediaPipe
- *     WASM runtime + jsDelivr, which serves that runtime's loader on first use.
- *   - connect-src: 'self' + the two origins the pose model/runtime are fetched
- *     from once and then cached (jsDelivr WASM, Google storage model).
+ *   - script-src: the local bundle + 'wasm-unsafe-eval' for the packaged
+ *     MediaPipe runtime. No remote script origin is allowed.
+ *   - connect-src: local packaged assets and in-memory blob/data URLs only.
  *   - img/media: data: (thumbnails) and blob: (uploaded clip object URLs).
  *   - style-src 'unsafe-inline': React inline style props + the index.html
  *     <style> block. No remote styles are allowed.
@@ -27,12 +26,12 @@ const isMac = process.platform === "darwin";
  */
 const PROD_CSP = [
   "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net",
+  "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
   "font-src 'self' data:",
-  "connect-src 'self' blob: data: https://cdn.jsdelivr.net https://storage.googleapis.com",
+  "connect-src 'self' blob: data:",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

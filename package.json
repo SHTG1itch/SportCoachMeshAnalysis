@@ -66,7 +66,10 @@
       "!dist/sample_seq.json",
       "!dist/sample_single.json",
       "dist-electron/**",
-      "node_modules/**"
+      "node_modules/**",
+      "!node_modules/@mediapipe/tasks-vision/wasm/**",
+      "THIRD_PARTY_NOTICES.md",
+      "THIRD_PARTY_LICENSES/**"
     ],
     "directories": {
       "output": "release"
