@@ -26,15 +26,11 @@ const landmarkers: Partial<Record<InstanceKey, Promise<PoseLandmarker>>> = {};
  * Strictly-increasing timestamp clock for the shared VIDEO-mode landmarker.
  *
  * MediaPipe's `detectForVideo` requires timestamps that increase monotonically
- * across every call to a given landmarker instance — and we cache + reuse one
- * VIDEO landmarker for the whole session (see `getLandmarker`). A single
- * analysis calls `extractVideo` twice: once for the pro clip, once for the
- * user clip. If each clip derived its timestamps from its own local media time
- * (which restarts at ~0), the second clip would feed timestamps that run
- * *backwards* relative to the landmarker's internal clock, and MediaPipe rejects
- * them with "Packet timestamp mismatch", aborting the entire comparison. We
- * therefore offset every clip's timestamps to start just past the previous
- * clip's last one. Reset to 0 whenever the landmarker is torn down.
+ * across every call to a given landmarker instance. The application now tears
+ * the tracker down between unrelated athletes because live pro/amateur testing
+ * found that temporal identity could carry across clips and invert handedness.
+ * Direct callers and dev probes can still reuse an instance, so their
+ * timestamps remain monotonic until resetLandmarker() tears it down.
  */
 let videoClock = 0;
 
@@ -315,7 +311,8 @@ function mirrorOnCanvas(
 
 export interface DetectOptions {
   /** Flip-augmented detection: a second inference on the mirrored frame,
-   * merged back. Defaults to true (accuracy over speed). */
+   * merged back. Images default to true. Videos require explicit opt-in: live
+   * pro/amateur validation found temporal TTA could invert handedness. */
   tta?: boolean;
 }
 
@@ -365,8 +362,10 @@ export async function extractVideo(
   } & DetectOptions = {},
 ): Promise<{ frames: PoseFrame[]; fps: number; duration: number }> {
   const lm = await getLandmarker("VIDEO");
-  // Flip-augmented detection: the mirrored stream tracks on its own instance.
-  const lmF = opts.tta === false ? null : await getLandmarker("VIDEO", "VIDEO_TTA");
+  // VIDEO TTA is opt-in. It reversed both labeled tennis handedness results in
+  // the live benchmark; primary VIDEO mode was accurate and twice as fast.
+  // IMAGE mode retains default-on TTA because it has no temporal tracker.
+  const lmF = opts.tta === true ? await getLandmarker("VIDEO", "VIDEO_TTA") : null;
   const duration = video.duration;
   if (!isFinite(duration) || duration <= 0) {
     throw new Error("Video duration is not available yet — wait for 'loadedmetadata'.");

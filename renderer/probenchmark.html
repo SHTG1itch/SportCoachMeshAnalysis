@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; connect-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Professional-amateur live benchmark</title>
+  </head>
+  <body>
+    <main>
+      <h1>Professional-amateur live benchmark</h1>
+      <p id="status">STARTING</p>
+      <pre id="out"></pre>
+    </main>
+    <script type="module" src="/src/probenchmark.ts"></script>
+  </body>
+</html>

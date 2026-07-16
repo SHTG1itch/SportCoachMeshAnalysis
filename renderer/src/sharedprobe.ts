@@ -1,10 +1,8 @@
 // Shared-landmarker topology probe (dev-only). Closes the one gap in the
-// IMAGE-vs-VIDEO parity check: modeprobe extracted each clip on a FRESH VIDEO
-// landmarker, but the app (and the videoClock fix) share ONE VIDEO landmarker
-// across pro→user with no reset — so the user clip's first frames track from the
-// pro's last pose. This reproduces that exact topology with the FIXED monotonic
-// clock and measures whether cross-clip tracking contaminates the user frames
-// enough to move the REAL rubric.
+// IMAGE-vs-VIDEO parity check for the retired shared-tracker topology. This
+// probe demonstrated that a user clip's first frames can track from the pro's
+// last pose; the app now resets between athletes, while the probe remains as a
+// reproducible contrast against the fresh-landmarker baseline.
 //
 //   Pass A (pro = novak_fh): shared landmarker, clock from 0.
 //   Pass B (user = timo_fh): SAME landmarker, clock CONTINUED (the fix).
@@ -87,7 +85,7 @@ function frameDiff(a: PoseFrame, b: PoseFrame): { l2: number; ang: number } {
 }
 
 async function main() {
-  emit(`Shared-landmarker topology probe — reproduces the app's pro→user single-landmarker extraction with the videoClock fix.`);
+  emit(`Shared-landmarker topology probe — contrasts the retired shared tracker with the app's fresh-per-athlete lifecycle.`);
 
   // --- Shared topology: pro then user on ONE landmarker, no reset between. ---
   setStatus("shared: pro");
@@ -129,7 +127,7 @@ async function main() {
   emit(`  Δsim = ${f2(Math.abs(rShared.overallSimilarity - rFresh.overallSimilarity))}`);
   const ok = Math.abs(rShared.overallSimilarity - rFresh.overallSimilarity) < 0.03 &&
     JSON.stringify(rShared.handedness) === JSON.stringify(rFresh.handedness);
-  emit(`  VERDICT: ${ok ? "✓ shared-landmarker topology does NOT change the rubric — parity holds under the app's actual extraction" : "⚠ shared topology shifted the rubric — investigate"}`);
+  emit(`  VERDICT: ${ok ? "✓ legacy shared tracking did not change this rubric" : "⚠ shared tracking shifted the rubric — fresh-per-athlete reset is required"}`);
 
   emit(`\n===== DONE =====`);
   setStatus("DONE");

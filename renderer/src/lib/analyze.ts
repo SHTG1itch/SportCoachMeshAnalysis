@@ -12,6 +12,7 @@ import { generateGuideAndWorkouts } from "./coach";
 import {
   detectImage,
   extractVideo,
+  resetLandmarker,
   type ExtractionProgress,
 } from "./pose/landmarker";
 
@@ -73,14 +74,10 @@ export interface AnalyzeInput {
 }
 
 /**
- * Single-flight guard. The VIDEO-mode MediaPipe landmarkers are cached
- * singletons with per-instance monotonic clocks and temporal tracking state
- * (see landmarker.ts); two extractions interleaving detectForVideo calls on
- * them feed non-monotonic timestamps and MediaPipe kills BOTH runs with
- * "Packet timestamp mismatch". A second concurrent analysis must therefore be
- * refused outright — the UI additionally aborts an in-flight run when its
- * screen unmounts, so hitting this error requires racing a start against a
- * still-tearing-down run.
+ * Single-flight guard. VIDEO-mode inference is stateful and each clip owns its
+ * tracker until extraction finishes. Two analyses interleaving calls would
+ * corrupt that state or close an instance the other still uses, so a second
+ * concurrent analysis is refused outright.
  */
 let analysisInFlight = false;
 
@@ -102,6 +99,10 @@ export async function runAnalysis(
   let proMedia: LoadedMedia | undefined;
   let userMedia: LoadedMedia | undefined;
   try {
+    // VIDEO tracking learns temporal identity, including left/right. Reusing it
+    // for an unrelated athlete made a known left-handed amateur inherit the
+    // right-handed pro's identity in the live benchmark.
+    await resetLandmarker();
     proMedia = await loadMedia(input.proFile, input.proKind, input.signal);
     onProgress({
       stage: "loading_pro",
@@ -147,6 +148,8 @@ export async function runAnalysis(
       progress: 0.4,
     });
     userMedia = await loadMedia(input.userFile, "video", input.signal);
+    // Every source clip starts with a clean temporal tracker.
+    await resetLandmarker();
     const userResult = await extractVideo(userMedia.video!, {
       targetFps: 30,
       signal: input.signal,
@@ -206,10 +209,16 @@ export async function runAnalysis(
     onProgress({ stage: "done", message: "Analysis complete", progress: 1 });
     return report;
   } finally {
-    analysisInFlight = false;
-    // Release media element resources (revoke object URLs) on every exit path.
-    proMedia?.cleanup();
-    userMedia?.cleanup();
+    // The next run must never inherit temporal identity from this athlete.
+    try {
+      await resetLandmarker();
+    } finally {
+      // Release media element resources and the single-flight lock even if a
+      // future landmarker implementation makes teardown fallible.
+      proMedia?.cleanup();
+      userMedia?.cleanup();
+      analysisInFlight = false;
+    }
   }
 }
 

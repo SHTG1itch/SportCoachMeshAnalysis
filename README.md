@@ -257,7 +257,8 @@ Electron window together.
 npm run build     # Vite production bundle + clean Electron TypeScript build
 npm start         # builds and runs Electron directly from this checkout
 npm run dev       # live-reload development mode
-npm run test      # Vitest — 188 active tests plus 6 gated real-footage evaluations
+npm run test      # Vitest — 200 active tests plus 6 gated diagnostics
+npm run test:benchmark:live # fresh VIDEO inference on 600 real pro/amateur frames
 npm run test:database # native SQLite startup/recovery test under Electron's ABI
 npm run test:startup  # production-mode source launch + preload/IPC smoke test
 npm run typecheck # renderer, test, shared, and Electron TypeScript projects
@@ -309,8 +310,9 @@ and number-driven rather than free-form.
     sports with no sport jargon, and to drive workouts off the muscle groups
     behind each mismatch) plus the skeleton-projection math (head-up
     auto-orientation under y-DOWN coords), persistence validation, media limits,
-    crash-loop handling, and log rotation are covered by 188 passing Vitest
-    tests. Six expensive real-footage evaluations remain opt-in.
+    crash-loop handling, and log rotation are covered by 200 passing Vitest
+    tests. This includes nine always-on checks over real professional-versus-
+    amateur detector output; six additional diagnostic evaluations remain opt-in.
   - Renderer + Electron both typecheck clean; the renderer builds through Vite,
     Electron output is cleaned before every compile, and a real native SQLite
     test proves startup, migration, WAL settings, integrity checking, corrupt
@@ -319,18 +321,20 @@ and number-driven rather than free-form.
     renderer, context-isolated preload, working IPC persistence bridge, and a
     persistent main-process log. CI exercises this same terminal startup path on
     Windows after verifying native SQLite initialization and recovery.
-  - The real analysis engine was validated on actual tennis footage (an amateur
-    forehand vs. Novak Djokovic court-level practice, pulled from YouTube) via a
-    browser harness that runs the live `compare()` + coaching pipeline on
-    extracted poses. Self-consistency holds (a clip vs. itself ≈ 100%, vs. its
-    mirror ≈ 100% with handedness flipped), a same-player reference scores higher
-    than the amateur, and the amateur's flagged faults are biomechanically sound
-    (less hip/knee load, smaller swing arc). Extraction in the harness uses
-    MediaPipe IMAGE mode per frame; the shipped app uses VIDEO mode (temporal
-    tracking) — the geometry/compare/coaching code is identical. The local,
-    bundled single-frame path was also exercised end-to-end with a real pro
-    image and 120 user frames: 113 poses were detected and the comparison,
-    guide, and workouts completed without a CDN.
+  - The real analysis engine is regression-tested on two labeled Novak Djokovic
+    versus amateur forehand pairs (right-vs-right and right-vs-left) plus a
+    professional-versus-amateur basketball free throw. The gate validates input
+    integrity, coverage, finite meshes/statistics, exact-match controls,
+    handedness and mirroring, calibrated score bands, actionable number-grounded
+    coaching, complete workouts, phase/path bounds, and deterministic replay.
+    `npm run test:benchmark:live` additionally re-runs the current bundled model
+    in VIDEO mode on all 600 tennis source frames. That live pass exposed and now
+    guards two issues frozen fixtures could not: VIDEO tracker identity must be
+    reset between athletes, and temporal flip augmentation can invert known
+    handedness. Video inference therefore uses a fresh primary tracker per clip.
+    These are reference-similarity benchmarks, not a universal skill classifier:
+    camera angle and shot selection still matter. The local bundled single-frame
+    path was also exercised end-to-end with a real pro image and 120 user frames.
 - **Still requiring manual environment validation**:
   - Interacting with the Electron upload/result UI on representative
     end-user machines and GPU/CPU configurations. Automated boot, unit,
