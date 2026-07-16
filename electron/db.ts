@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { app } from "electron";
 import * as path from "path";
 import * as fs from "fs";
+import { openDatabaseWithRecovery } from "./databaseCore";
 import type {
   AnalysisRecord,
   AnalysisReport,
@@ -34,45 +35,18 @@ function parseReport(payload: string): AnalysisReport {
 
 let db: Database.Database | null = null;
 
-export function initDb(): Database.Database {
-  if (db) return db;
+export interface DatabaseInitResult {
+  database: Database.Database;
+  recoveredFrom?: string;
+}
+
+export function initDb(): DatabaseInitResult {
+  if (db) return { database: db };
   const dir = path.join(app.getPath("userData"), "data");
   fs.mkdirSync(dir, { recursive: true });
-  db = new Database(path.join(dir, "coach.db"));
-  db.pragma("journal_mode = WAL");
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS analyses (
-      id TEXT PRIMARY KEY,
-      created_at TEXT NOT NULL,
-      sport_id TEXT NOT NULL,
-      shot TEXT NOT NULL,
-      thumbnail TEXT,
-      payload TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_analyses_created ON analyses(created_at DESC);
-
-    CREATE TABLE IF NOT EXISTS workouts (
-      id TEXT PRIMARY KEY,
-      saved_at TEXT NOT NULL,
-      analysis_id TEXT,
-      tags TEXT NOT NULL,
-      payload TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_workouts_saved ON workouts(saved_at DESC);
-
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-  `);
-  // One-time migration: the app is fully offline now and no longer stores an
-  // Anthropic API key or model choice. Remove any legacy rows from older DBs so
-  // the settings shape matches the current AppSettings. (A plain DELETE is the
-  // right tool here — secure freelist scrubbing was considered and deferred:
-  // the key was always plaintext in SQLite by design, so it's out of scope, and
-  // VACUUM can't run inside a transaction, which would risk startup.)
-  db.prepare(`DELETE FROM settings WHERE key IN ('anthropicApiKey','model')`).run();
-  return db;
+  const opened = openDatabaseWithRecovery(path.join(dir, "coach.db"));
+  db = opened.database;
+  return opened;
 }
 
 function requireDb(): Database.Database {

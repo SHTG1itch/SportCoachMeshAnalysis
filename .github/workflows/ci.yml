@@ -50,6 +50,9 @@ jobs:
       - name: Build production bundles
         run: npm run build
 
+      - name: Test native database recovery
+        run: npm run test:database
+
       - name: Package Windows application
         run: npx electron-builder --win --dir --publish never
 
