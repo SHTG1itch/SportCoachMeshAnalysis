@@ -48,7 +48,7 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isString = (value: unknown): value is string => typeof value === "string";
-const isNonEmptyString = (value: unknown): value is string =>
+export const isNonEmptyString = (value: unknown): value is string =>
   isString(value) && value.trim().length > 0;
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
@@ -70,6 +70,20 @@ export const isStringArray = (value: unknown): value is string[] =>
 
 export const isTheme = (value: unknown): value is "dark" | "light" =>
   value === "dark" || value === "light";
+
+/** Timestamps emitted by Date#toISOString. Keeping this exact avoids ambiguous
+ * locale dates reaching the renderer and displaying as "Invalid Date". */
+export const isIsoTimestamp = (value: unknown): value is string => {
+  if (!isString(value) || value.length !== 24) return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+};
+
+/** Thumbnails are generated locally as raster canvas data URLs. Reject SVG,
+ * HTML, arbitrary data URLs, and malformed base64 at the persistence boundary. */
+export const isRasterImageDataUrl = (value: unknown): value is string =>
+  isString(value) &&
+  /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value);
 
 function isSportMeta(value: unknown): value is SportMeta {
   if (!isObject(value)) return false;

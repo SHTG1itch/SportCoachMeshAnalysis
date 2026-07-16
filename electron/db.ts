@@ -12,6 +12,9 @@ import type {
 } from "../shared/types";
 import {
   isAnalysisReport,
+  isIsoTimestamp,
+  isNonEmptyString,
+  isRasterImageDataUrl,
   isSportId,
   isStringArray,
   isTheme,
@@ -116,14 +119,26 @@ export function listAnalyses(): AnalysisRecord[] {
   const out: AnalysisRecord[] = [];
   for (const row of rows) {
     try {
-      if (!isSportId(row.sportId)) throw new Error("invalid sportId");
+      if (
+        !isNonEmptyString(row.id) ||
+        !isIsoTimestamp(row.createdAt) ||
+        !isSportId(row.sportId) ||
+        !isNonEmptyString(row.shot) ||
+        (row.thumbnail !== null && !isRasterImageDataUrl(row.thumbnail))
+      ) {
+        throw new Error("invalid analysis metadata");
+      }
+      const report = parseReport(row.payload);
+      if (report.sport.id !== row.sportId || report.shot !== row.shot) {
+        throw new Error("inconsistent analysis metadata");
+      }
       out.push({
         id: row.id,
         createdAt: row.createdAt,
         sportId: row.sportId,
         shot: row.shot,
         thumbnailDataUrl: row.thumbnail ?? undefined,
-        report: parseReport(row.payload),
+        report,
       });
     } catch (e) {
       logWarn(`Skipping unreadable analysis row ${row.id}:`, e);
@@ -153,14 +168,26 @@ export function getAnalysis(id: string): AnalysisRecord | null {
   // Same guarded parse as listAnalyses: one corrupt row should read as
   // missing, not reject the IPC call.
   try {
-    if (!isSportId(row.sportId)) throw new Error("invalid sportId");
+    if (
+      !isNonEmptyString(row.id) ||
+      !isIsoTimestamp(row.createdAt) ||
+      !isSportId(row.sportId) ||
+      !isNonEmptyString(row.shot) ||
+      (row.thumbnail !== null && !isRasterImageDataUrl(row.thumbnail))
+    ) {
+      throw new Error("invalid analysis metadata");
+    }
+    const report = parseReport(row.payload);
+    if (report.sport.id !== row.sportId || report.shot !== row.shot) {
+      throw new Error("inconsistent analysis metadata");
+    }
     return {
       id: row.id,
       createdAt: row.createdAt,
       sportId: row.sportId,
       shot: row.shot,
       thumbnailDataUrl: row.thumbnail ?? undefined,
-      report: parseReport(row.payload),
+      report,
     };
   } catch (e) {
     logWarn(`Unreadable analysis row ${row.id}:`, e);
@@ -210,7 +237,13 @@ export function listWorkouts(): SavedWorkout[] {
     try {
       const tags: unknown = JSON.parse(row.tags);
       const workout: unknown = JSON.parse(row.payload);
-      if (!isStringArray(tags) || !isWorkout(workout)) {
+      if (
+        !isNonEmptyString(row.id) ||
+        !isIsoTimestamp(row.savedAt) ||
+        (row.analysisId !== null && !isNonEmptyString(row.analysisId)) ||
+        !isStringArray(tags) ||
+        !isWorkout(workout)
+      ) {
         throw new Error("payload is not a valid SavedWorkout");
       }
       out.push({
