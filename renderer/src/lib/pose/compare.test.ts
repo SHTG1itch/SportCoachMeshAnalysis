@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  chooseMirroredOrientation,
   compare,
   repairImplausibleFrames,
   repairImplausible,
@@ -40,6 +41,23 @@ const SPORT: SportMeta = {
   keyJoint: "right_wrist",
   description: "Racket sport",
 };
+
+describe("chooseMirroredOrientation", () => {
+  it("uses the independently detected motion side when alignments are within 1%", () => {
+    expect(chooseMirroredOrientation(1.193, 1.197, true)).toBe(true);
+    expect(chooseMirroredOrientation(1.193, 1.197, false)).toBe(false);
+  });
+
+  it("uses the clearly closer alignment outside the tie band", () => {
+    expect(chooseMirroredOrientation(1.35, 1.29, false)).toBe(true);
+    expect(chooseMirroredOrientation(1.14, 1.25, true)).toBe(false);
+  });
+
+  it("handles an unreachable orientation without propagating Infinity", () => {
+    expect(chooseMirroredOrientation(Number.POSITIVE_INFINITY, 1, false)).toBe(true);
+    expect(chooseMirroredOrientation(1, Number.POSITIVE_INFINITY, true)).toBe(false);
+  });
+});
 
 describe("compare", () => {
   it("identical sequences produce ~perfect similarity and low deltas", () => {

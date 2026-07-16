@@ -247,6 +247,31 @@ function similarityFromDistance(d: number): number {
   return Math.max(0, 1 - Math.min(1, d / SIM_NORM));
 }
 
+/**
+ * Resolve sequence handedness from two complementary signals.
+ *
+ * Alignment is normally the stronger signal: it fixed several real tennis
+ * clips where noisy, nearly-symmetric recovery motion made kinetic-energy
+ * handedness pick the wrong wrist. But when raw and mirrored DTW are within 1%
+ * they are empirically indistinguishable, so letting a rounding-sized distance
+ * difference decide the athlete's side is unstable. In that tie band, retain
+ * the independently measured motion side. A real lefty-pro/righty-amateur free
+ * throw fixture exposed this case (1.193 raw vs 1.197 mirrored): the old strict
+ * minimum incorrectly reported both athletes as left-handed.
+ */
+const ORIENTATION_TIE_RATIO = 0.01;
+export function chooseMirroredOrientation(
+  rawDistance: number,
+  mirroredDistance: number,
+  motionSuggestsMirror: boolean,
+): boolean {
+  if (!Number.isFinite(rawDistance)) return Number.isFinite(mirroredDistance);
+  if (!Number.isFinite(mirroredDistance)) return false;
+  const scale = Math.max(Math.min(Math.abs(rawDistance), Math.abs(mirroredDistance)), 1e-9);
+  const tied = Math.abs(rawDistance - mirroredDistance) <= scale * ORIENTATION_TIE_RATIO;
+  return tied ? motionSuggestsMirror : mirroredDistance < rawDistance;
+}
+
 const TRUNK_LEAN_IDX = JOINT_FEATURES.findIndex((j) => j.name === "trunk_lean");
 /** A standing athlete's torso never leans past horizontal; a trunk_lean beyond
  * this (degrees) means MediaPipe flipped the pose's depth on that frame —
@@ -742,7 +767,11 @@ export function compare(input: CompareInput): AnalysisReport {
     const dtwOpts = { bandRatio: 0.25, distance: weightedStandardizedDistance };
     const resRaw = dtw(proAug, userAugRaw, dtwOpts);
     const resMir = dtw(proAug, userAugMir, dtwOpts);
-    mirrored = resMir.distance < resRaw.distance;
+    mirrored = chooseMirroredOrientation(
+      resRaw.distance,
+      resMir.distance,
+      userSide !== proSide,
+    );
     userSide = mirrored ? opposite(proSide) : proSide;
     userAngles = mirrored ? userAnglesMirrored : userAnglesRaw;
     const userAug = mirrored ? userAugMir : userAugRaw;

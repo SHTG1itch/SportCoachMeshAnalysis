@@ -1,13 +1,10 @@
 // VIDEO-mode TTA probe (dev fixture, NOT shipped).
 //
-// The shipped video-vs-video flow now runs TWO VIDEO-mode landmarkers (primary
-// + mirrored stream) off one shared monotonic clock, across two clips with no
-// reset in between — the exact topology that previously hid a timestamp bug
-// that broke the headline feature. Real <video> decode is suspended in this
-// automation environment, so this probe replicates extractVideo's loop
-// faithfully (same instances via getLandmarker, same ts scheme, same
-// mirrorOnCanvas/mergeTta/unmirrorFrame internals) against JPG frame
-// sequences, pro then user, and verifies:
+// VIDEO TTA is still available as an explicit diagnostic option, but the live
+// professional/amateur benchmark showed it can invert handedness and the
+// shipped default is now one fresh primary tracker per clip. This legacy stress
+// probe keeps the dual-instance implementation itself covered against JPG frame
+// sequences and verifies:
 //   1. No "timestamp mismatch" throw on either instance across both clips.
 //   2. Detection rate stays high on both clips.
 //   3. The merged output is sane (core landmarks present, plausible torso).

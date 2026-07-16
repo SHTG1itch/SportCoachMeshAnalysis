@@ -1,14 +1,12 @@
 // Real <video> extraction + timestamp-fix verification (dev-only fixture).
 //
-// Part 1 (flake-free, canvas): replicates the FIXED extractVideo timestamp
-// scheme — a shared monotonic clock continued across two passes on ONE cached
-// VIDEO landmarker — and confirms MediaPipe accepts it (the buggy restart-from-0
-// scheme threw "Packet timestamp mismatch" 80/80 in modeprobe).
+// Part 1 (flake-free, canvas): verifies the monotonic timestamp safety retained
+// for direct callers and legacy probes that deliberately reuse one landmarker.
 //
 // Part 2 (real <video>): runs the ACTUAL fixed runAnalysis(proKind="video") on
 // real .mp4 files, exercising the full decode → seek → canvas → detectForVideo
-// path twice (pro then user) on the cached landmarker. Proves both that the fix
-// holds in the real code AND that the <video> extraction path runs.
+// path twice (pro then user), with runAnalysis resetting the tracker between
+// athletes. Proves both that lifecycle fix and the real <video> path run.
 //
 // Background tabs throttle <video> decode (documented env limitation); keep this
 // tab foreground. Results POST to :5174 so they are readable from disk.
@@ -128,7 +126,7 @@ async function fileFromUrl(url: string, name: string, type: string): Promise<Fil
 
 async function part2RealVideo() {
   emit(`\n===== PART 2: real runAnalysis(proKind="video") on <video> decode =====`);
-  await resetLandmarker(); // start clean; the app shares one landmarker across pro+user
+  await resetLandmarker(); // start the legacy shared-tracker stress path clean
   const sport = findSport("tennis")!;
   const proFile = await fileFromUrl("/testclips/novak_a.mp4", "pro.mp4", "video/mp4");
   const userFile = await fileFromUrl("/testclips/raw_timo.mp4", "user.mp4", "video/mp4");

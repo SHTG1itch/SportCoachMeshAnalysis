@@ -20,6 +20,7 @@
     "build:electron": "node scripts/clean-electron.mjs && tsc -p electron/tsconfig.json && node scripts/postbuild-electron.mjs",
     "start": "npm run build && cross-env NODE_ENV=production electron .",
     "test": "vitest run",
+    "test:benchmark:live": "node scripts/testProBenchmark.mjs",
     "test:database": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/testDatabase.cjs",
     "test:startup": "npm run build && node scripts/testStartup.mjs",
     "test:watch": "vitest",

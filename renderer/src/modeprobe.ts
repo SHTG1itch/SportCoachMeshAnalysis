@@ -9,11 +9,9 @@
 //     calling detectForVideo(canvas, ts)
 // and diffing the resulting worldLandmarks + joint angles per frame.
 //
-// It also reproduces the app's exact two-call timestamp pattern: runAnalysis
-// calls extractVideo twice (pro, then user) on ONE cached VIDEO landmarker, and
-// each call's timestamps restart near 0. MediaPipe detectForVideo requires
-// monotonically increasing timestamps, so the second (user) pass may throw. We
-// reproduce that here on a single landmarker instance and report what happens.
+// It also preserves the old two-call timestamp-reset reproduction. The app now
+// starts every athlete on a fresh tracker, but this remains proof of why direct
+// callers that reuse an instance need landmarker.ts's monotonic clock.
 //
 // Results are POSTed to the :5174 file server so they are readable from disk
 // regardless of the (flaky) browser extension connection.
@@ -225,7 +223,7 @@ async function divergenceForClip(clip: string, maxFrames: number) {
  * extractVideo restarts ts near 0 each call; the user pass thus feeds backwards
  * timestamps relative to the landmarker's internal clock. */
 async function timestampResetRepro() {
-  emit(`\n===== TIMESTAMP-RESET REPRO (mimics runAnalysis pro→user on one cached VIDEO landmarker) =====`);
+  emit(`\n===== LEGACY TIMESTAMP-RESET REPRO (two clips on one cached VIDEO landmarker) =====`);
   await resetLandmarker();
   const vid = await buildVideoLandmarker();
 
