@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { Upload, Film, Image as ImageIcon, X } from "lucide-react";
-import { inferMediaKind } from "../lib/media";
+import {
+  inferMediaKind,
+  validateMediaFile,
+  type MediaAccept,
+} from "../lib/media";
 
 interface Props {
   label: string;
-  accept: "image" | "video" | "image-or-video";
+  accept: MediaAccept;
   file: File | null;
   onChange: (f: File | null) => void;
   hint?: string;
@@ -15,19 +19,6 @@ function acceptString(accept: Props["accept"]): string {
   if (accept === "image") return "image/*";
   if (accept === "video") return "video/*";
   return "image/*,video/*";
-}
-
-function matchesAccept(file: File, accept: Props["accept"]): boolean {
-  const kind = inferMediaKind(file);
-  if (!kind) return true; // genuinely unknown — let Chromium loading decide
-  if (accept === "image") return kind === "image";
-  if (accept === "video") return kind === "video";
-  return true;
-}
-
-function rejectMessage(accept: Props["accept"]): string {
-  const kind = accept === "image" ? "an image" : accept === "video" ? "a video" : "an image or video";
-  return `That file isn't ${kind}. Please choose ${kind} file.`;
 }
 
 export function MediaDrop({ label, accept, file, onChange, hint }: Props) {
@@ -46,8 +37,9 @@ export function MediaDrop({ label, accept, file, onChange, hint }: Props) {
         onChange(null);
         return;
       }
-      if (!matchesAccept(f, accept)) {
-        setError(rejectMessage(accept));
+      const validationError = validateMediaFile(f, accept);
+      if (validationError) {
+        setError(validationError);
         return;
       }
       setError(null);

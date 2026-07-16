@@ -172,14 +172,14 @@ export function NewAnalysis() {
             accept="image-or-video"
             file={proFile}
             onChange={setProFile}
-            hint="Image or short clip (≤ 20s)"
+            hint="Image or short clip (20s ideal, 60s max)"
           />
           <MediaDrop
             label="You"
             accept="video"
             file={userFile}
             onChange={setUserFile}
-            hint="Video of your technique (≤ 20s)"
+            hint="Video of your technique (20s ideal, 60s max)"
           />
         </div>
         <div className="mt-4 flex items-start gap-2 text-xs text-ink-400">

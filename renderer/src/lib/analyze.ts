@@ -4,6 +4,7 @@ import type {
   SportMeta,
 } from "@shared/types";
 import type { PoseFrame } from "./pose/types";
+import { validateDecodedMedia } from "./media";
 import { L } from "./pose/types";
 import { compare } from "./pose/compare";
 import { detectionCoverage } from "./pose/prepare";
@@ -268,6 +269,12 @@ async function loadMedia(
       const image = new Image();
       image.src = url;
       await awaitMediaEvent(image, "load", "Image failed to load", signal);
+      const validationError = validateDecodedMedia(
+        "image",
+        image.naturalWidth,
+        image.naturalHeight,
+      );
+      if (validationError) throw new Error(validationError);
       return { image, cleanup: () => URL.revokeObjectURL(url) };
     }
     const video = document.createElement("video");
@@ -280,6 +287,13 @@ async function loadMedia(
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       await awaitMediaEvent(video, "loadedmetadata", "Video metadata failed to load", signal);
     }
+    const validationError = validateDecodedMedia(
+      "video",
+      video.videoWidth,
+      video.videoHeight,
+      video.duration,
+    );
+    if (validationError) throw new Error(validationError);
     return { video, cleanup: () => URL.revokeObjectURL(url) };
   } catch (e) {
     URL.revokeObjectURL(url);
