@@ -4,6 +4,8 @@
   "private": true,
   "description": "Desktop app that compares your athletic technique to a professional's using 3D pose estimation.",
   "author": "Srivats Iyer",
+  "license": "UNLICENSED",
+  "repository": "https://github.com/SHTG1itch/SportCoachMeshAnalysis.git",
   "engines": {
     "node": ">=22.12.0"
   },
@@ -16,6 +18,9 @@
     "build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p electron/tsconfig.json && node scripts/postbuild-electron.mjs",
+    "pack": "npm run build && electron-builder --dir --publish never",
+    "dist": "npm run build && electron-builder --publish never",
+    "verify:fuses": "node scripts/verifyFuses.mjs",
     "start": "cross-env NODE_ENV=production electron .",
     "test": "vitest run",
     "test:watch": "vitest",

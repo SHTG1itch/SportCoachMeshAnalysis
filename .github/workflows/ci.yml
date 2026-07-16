@@ -32,3 +32,26 @@ jobs:
 
       - name: Build production bundles
         run: npm run build
+
+  package-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundles
+        run: npm run build
+
+      - name: Package Windows application
+        run: npx electron-builder --win --dir --publish never
+
+      - name: Verify Electron fuses
+        run: npm run verify:fuses -- "release/win-unpacked/Sport Coach Mesh.exe"
