@@ -36,15 +36,17 @@ A three-step form:
 3. **Upload media** — two drop zones: a professional reference (image or short
    clip) and a video of you performing the same motion. Each zone accepts drag
    and drop or click/keyboard to browse, validates the file type immediately,
-   previews the chosen media, and shows the file name and size. An inline tip
-   explains how to film for the best result (side-on, whole body in frame, one
-   clean rep, steady camera, good lighting, matched camera angle).
+   previews the chosen media, and shows the file name and size. Images are
+   limited to 50 MB / 50 megapixels; videos to 1 GB / 10 megapixels / 60 seconds
+   (20 seconds is ideal). An inline tip explains how to film for the best result
+   (side-on, whole body in frame, one clean rep, steady camera, good lighting,
+   matched camera angle).
 
 The "Run analysis" button stays disabled until both clips are present (with an
 inline hint saying so). While a run is in progress a labelled progress bar
 reports the live stage and percentage; you can stop it from the button or by
-pressing **Esc**. The run is detached from the screen, so navigating away does
-not cancel it — it still saves and appears in History.
+pressing **Esc**. Navigating away also cancels the run so two MediaPipe VIDEO
+sessions cannot overlap and corrupt their monotonic tracking timestamps.
 
 ### Analysis Result
 
@@ -215,14 +217,14 @@ theme on every platform:
    world coordinates.
 11. **Persistence** — analyses, generated workouts, and settings are stored in a
    local SQLite DB under the Electron user-data directory. Your media, poses, and
-   results never leave your machine — the analysis and the coaching guide run
-   entirely on-device. The only data the app fetches over the network is the
-   open-source MediaPipe runtime + pose model (once, then cached); your videos
-   are never uploaded anywhere (see "Network use").
+   results never leave your machine — the analysis, bundled MediaPipe runtime
+   and model, and coaching guide all run entirely on-device. SQLite corruption
+   is checked at startup; damaged files are preserved in a timestamped backup
+   before a fresh store is created.
 
 ## Stack
 
-- **Electron 33** shell, frameless window with a custom title bar, theme-aware
+- **Electron 43** shell, frameless window with a custom title bar, theme-aware
   caption buttons on Windows/Linux, and an auto-hidden application menu. The
   context-isolated, sandboxed preload exposes a single namespaced `window.app`
   bridge (persistence, settings, and window controls).
@@ -248,20 +250,37 @@ npm run dev
 and the built `dist/` in prod.
 
 ```bash
-npm run build     # typecheck + vite build + electron tsc
+npm run build     # Vite production bundle + clean Electron TypeScript build
 npm run start     # runs Electron against the built bundle
-npm run test      # vitest — 131 unit tests across vec / angles / dtw / normalize / prepare / handedness / phases / landmarker / render / compare / coach / multi-sport regression (plus 6 gated real-footage evals, skipped by default)
-npm run typecheck # tsc --noEmit for both tsconfigs
+npm run test      # Vitest — 188 active tests plus 6 gated real-footage evaluations
+npm run test:database # native SQLite startup/recovery test under Electron's ABI
+npm run typecheck # renderer, test, shared, and Electron TypeScript projects
 ```
 
 ### Native module note
 
-`better-sqlite3` is a native module. On Windows it builds against the Node ABI
-of your installed Node runtime, but Electron ships its own ABI. If the app fails
-to load the DB after `npm install`, run `npm run rebuild` (which invokes
-`electron-builder install-app-deps` to rebuild native deps against Electron's
-ABI). The renderer code (the entire analysis pipeline) has no native
-dependencies and will run under any Node for `npm test`.
+`better-sqlite3` is a native module. `npm install` runs electron-builder's
+`install-app-deps` automatically so the binary matches Electron's ABI. Use
+`npm run rebuild` to repeat that step when troubleshooting. The renderer code
+(the entire analysis pipeline) has no native dependencies and runs under Node
+for `npm test`; `npm run test:database` deliberately runs under Electron.
+
+### Package for Windows
+
+```bash
+npm run pack # unpacked application for smoke testing
+npm run dist # NSIS installer in release/
+npm run dist:signed # release build; fails unless a signing identity is available
+```
+
+Packaging verifies hardened Electron fuses in CI. A distributable release must
+also be Authenticode-signed: provide `WIN_CSC_LINK` and
+`WIN_CSC_KEY_PASSWORD` through CI secrets before running the release build.
+Never commit a certificate or password. Local unsigned artifacts are suitable
+for testing only and will show Windows an unknown-publisher warning. The manual
+**Signed Windows release** GitHub Actions workflow runs all tests, builds with
+mandatory signing, independently verifies both Authenticode signatures, checks
+the packaged ASAR and Electron fuses, and uploads the signed installer artifact.
 
 ### No API key, fully free
 
@@ -300,11 +319,17 @@ and number-driven rather than free-form.
     **sport-agnostic** — verified to emit identical mesh-mismatch coaching across
     sports with no sport jargon, and to drive workouts off the muscle groups
     behind each mismatch) plus the skeleton-projection math (head-up
-    auto-orientation under y-DOWN coords) are all unit-tested (131 passing
-    Vitest tests).
-  - Renderer + Electron both typecheck clean; renderer builds clean through
-    Vite (the production build transforms and bundles every UI component, so a
-    broken screen, class, or import fails the build).
+    auto-orientation under y-DOWN coords), persistence validation, media limits,
+    crash-loop handling, and log rotation are covered by 188 passing Vitest
+    tests. Six expensive real-footage evaluations remain opt-in.
+  - Renderer + Electron both typecheck clean; the renderer builds through Vite,
+    Electron output is cleaned before every compile, and a real native SQLite
+    test proves startup, migration, WAL settings, integrity checking, corrupt
+    file preservation, and fresh-store recovery under Electron's ABI.
+  - The Windows directory package launches with the production CSP, sandboxed
+    renderer, ASAR integrity enforcement, nine verified Electron fuses, and a
+    persistent main-process log. The package contains the pinned MediaPipe model
+    and WASM assets and excludes development footage/harness data.
   - The real analysis engine was validated on actual tennis footage (an amateur
     forehand vs. Novak Djokovic court-level practice, pulled from YouTube) via a
     browser harness that runs the live `compare()` + coaching pipeline on
@@ -313,11 +338,17 @@ and number-driven rather than free-form.
     than the amateur, and the amateur's flagged faults are biomechanically sound
     (less hip/knee load, smaller swing arc). Extraction in the harness uses
     MediaPipe IMAGE mode per frame; the shipped app uses VIDEO mode (temporal
-    tracking) — the geometry/compare/coaching code is identical.
-- **Not verified without a live app run**:
-  - The Electron result UI on real uploads (pipeline it renders is verified;
-    the React screens are typecheck-only).
-  - Single-frame "pro as image" mode on real media (unit-tested only).
+    tracking) — the geometry/compare/coaching code is identical. The local,
+    bundled single-frame path was also exercised end-to-end with a real pro
+    image and 120 user frames: 113 poses were detected and the comparison,
+    guide, and workouts completed without a CDN.
+- **Still requiring manual release validation**:
+  - Interacting with the packaged Electron upload/result UI on representative
+    end-user machines and GPU/CPU configurations. Automated boot, unit,
+    inference, and package checks cover the underlying paths but not every
+    visual interaction.
+  - Authenticode signing and installer reputation require the release owner's
+    code-signing certificate; unsigned local builds are not distributable.
   - Contact-instant-only faults remain a known limitation: per-frame confidence
     weighting now discounts low-visibility contact frames in every per-joint
     statistic (so they can no longer fabricate a fault), but significance still
