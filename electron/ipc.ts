@@ -21,6 +21,8 @@ import type {
 } from "../shared/types";
 import {
   isAnalysisReport,
+  isIsoTimestamp,
+  isRasterImageDataUrl,
   isSportId,
   isTheme,
   isWorkout,
@@ -50,7 +52,7 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
 function str(v: unknown, max: number, field: string): string {
-  if (typeof v !== "string" || v.length === 0 || v.length > max) {
+  if (typeof v !== "string" || v.trim().length === 0 || v.length > max) {
     throw new Error(`Invalid IPC payload: ${field}`);
   }
   return v;
@@ -67,10 +69,14 @@ function validateAnalysis(r: unknown): AnalysisRecord {
   if (!isObj(r)) throw new Error("Invalid IPC payload: analysis record");
   str(r.id, MAX_ID, "id");
   str(r.createdAt, MAX_ID, "createdAt");
+  if (!isIsoTimestamp(r.createdAt)) throw new Error("Invalid IPC payload: createdAt");
   if (!isSportId(r.sportId)) throw new Error("Invalid IPC payload: sportId");
   str(r.shot, MAX_SHOT, "shot");
   if (r.thumbnailDataUrl !== undefined) {
-    if (typeof r.thumbnailDataUrl !== "string" || r.thumbnailDataUrl.length > MAX_THUMB) {
+    if (
+      !isRasterImageDataUrl(r.thumbnailDataUrl) ||
+      r.thumbnailDataUrl.length > MAX_THUMB
+    ) {
       throw new Error("Invalid IPC payload: thumbnailDataUrl");
     }
   }
@@ -86,6 +92,7 @@ function validateWorkout(w: unknown): SavedWorkout {
   if (!isObj(w)) throw new Error("Invalid IPC payload: workout record");
   str(w.id, MAX_ID, "id");
   str(w.savedAt, MAX_ID, "savedAt");
+  if (!isIsoTimestamp(w.savedAt)) throw new Error("Invalid IPC payload: savedAt");
   if (w.analysisId !== undefined) str(w.analysisId, MAX_ID, "analysisId");
   if (!Array.isArray(w.tags) || w.tags.some((t) => typeof t !== "string")) {
     throw new Error("Invalid IPC payload: tags");

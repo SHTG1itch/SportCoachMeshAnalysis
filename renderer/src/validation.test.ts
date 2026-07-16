@@ -3,6 +3,8 @@ import sequenceRecord from "../public/sample_seq.json";
 import singleRecord from "../public/sample_single.json";
 import {
   isAnalysisReport,
+  isIsoTimestamp,
+  isRasterImageDataUrl,
   isTheme,
   isWorkout,
 } from "@shared/validation";
@@ -44,5 +46,19 @@ describe("persistence runtime validation", () => {
     expect(isTheme("dark")).toBe(true);
     expect(isTheme("light")).toBe(true);
     expect(isTheme("sepia")).toBe(false);
+  });
+
+  it("accepts only canonical ISO timestamps", () => {
+    expect(isIsoTimestamp("2026-07-15T12:34:56.789Z")).toBe(true);
+    expect(isIsoTimestamp("July 15, 2026")).toBe(false);
+    expect(isIsoTimestamp("2026-13-99T99:99:99.999Z")).toBe(false);
+  });
+
+  it("accepts raster thumbnails but rejects active or malformed data URLs", () => {
+    expect(isRasterImageDataUrl("data:image/png;base64,aGVsbG8=")).toBe(true);
+    expect(isRasterImageDataUrl("data:image/jpeg;base64,/9j/AA==")).toBe(true);
+    expect(isRasterImageDataUrl("data:image/svg+xml;base64,PHN2Zz4=")).toBe(false);
+    expect(isRasterImageDataUrl("data:text/html;base64,PGgxPkJvb208L2gxPg==")).toBe(false);
+    expect(isRasterImageDataUrl("data:image/png;base64,%%%")).toBe(false);
   });
 });
