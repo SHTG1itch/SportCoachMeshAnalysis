@@ -58,3 +58,6 @@ jobs:
 
       - name: Test native database recovery
         run: npm run test:database
+
+      - name: Smoke-test terminal startup and IPC
+        run: npm run test:startup
